@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import datetime as dt
 import json
 import os
 import re
@@ -23,6 +24,7 @@ _AGE_KEY = re.compile(r"^(?:age|patientage|age_sex|ageyears|umar|वय|आय�
 _DATE_VALUE = re.compile(
     r"(?<![\w/])(?:\d{4}-\d{1,2}-\d{1,2}(?:[T ][0-9:.+-]+Z?)?|\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})(?![\w/])"
 )
+_MONTH_VALUE = re.compile(r"(?<![\w/])(?:\d{4}[-/]\d{1,2}|\d{1,2}[./-]\d{4}|[A-Za-z]{3,9}\s+\d{4}|\d{4})(?![\w/])", re.I)
 
 
 @dataclass(frozen=True, repr=False)
@@ -170,12 +172,26 @@ def _text_fields(record: PrivacyRecord, text: str) -> None:
             if kind in {"event_date", "dob"}:
                 date_match = next((candidate for candidate in _DATE_VALUE.finditer(raw)
                                    if parse_date(candidate.group())), None)
+                if date_match is None and kind == "event_date":
+                    date_match = next((candidate for candidate in _MONTH_VALUE.finditer(raw)
+                                       if _valid_month_value(candidate.group())), None)
                 if not date_match:
                     continue
                 left += date_match.start()
                 right = left + len(date_match.group())
                 raw = date_match.group()
             record.add(kind, raw, kind, (f"@{left}:{right}",), (left, right))
+
+
+def _valid_month_value(value: str) -> bool:
+    text = value.strip()
+    for fmt in ("%Y-%m", "%Y/%m", "%m/%Y", "%m-%Y", "%m.%Y", "%B %Y", "%b %Y", "%Y"):
+        try:
+            dt.datetime.strptime(text, fmt)
+            return True
+        except ValueError:
+            continue
+    return False
 
 
 def collect_privacy_records(input_dir: Path, max_bytes: int = 50 * 1024 * 1024) -> list[PrivacyRecord]:
