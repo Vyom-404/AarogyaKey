@@ -73,6 +73,19 @@ class RiskAndPipelineTests(unittest.TestCase):
             self.assertNotIn("2026-11-26", clean)
             self.assertIn('"patient": null', (output / "records.jsonl").read_text())
 
+    def test_visit_identifiers_are_not_classified_as_dates_and_months_remain_measurable(self) -> None:
+        with tempfile.TemporaryDirectory() as input_dir:
+            root = Path(input_dir)
+            (root / "visits.json").write_text(json.dumps({"visits": [{
+                "visit_id": "OPD/26/02/00085", "visit_date": "2026-03-04"}]}), encoding="utf-8")
+            structured = collect_privacy_records(root)[0]
+            self.assertEqual([(f.field_name, f.value) for f in structured.fields if f.kind == "event_date"],
+                             [("visit_date", "2026-03-04")])
+            (root / "note.txt").write_text(
+                "Visit ID: OPD/26/02/00085\nDate: OPD/26/02/00085\nDate: 05-2026\n", encoding="utf-8")
+            text_record = next(r for r in collect_privacy_records(root) if r.file == "note.txt")
+            self.assertEqual([f.value for f in text_record.fields if f.kind == "event_date"], ["05-2026"])
+
     def test_metadata_dates_shift_without_exposing_original_value(self) -> None:
         with tempfile.TemporaryDirectory() as input_dir, tempfile.TemporaryDirectory() as output_parent:
             root = Path(input_dir)
