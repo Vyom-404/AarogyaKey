@@ -15,6 +15,7 @@ from src.detection import PIIDetector
 from src.detection.detector import field_category, is_medical_field
 from src.detection.normalization import name_keys, normalize_text
 from src.linkage.models import Carrier, RecordIdentity
+from src.security.filesystem import read_regular_file
 
 SUPPORTED = {".csv", ".tsv", ".json", ".txt"}
 _CLINICAL_RESOURCES = {
@@ -305,12 +306,13 @@ def _make_candidate(rel: str, loc: str, file_format: str) -> RecordIdentity:
     return RecordIdentity(rel, loc, file_format)
 
 
-def extract_file_records(path: Path, rel: str, detector: PIIDetector) -> list[RecordIdentity]:
+def extract_file_records(path: Path, rel: str, detector: PIIDetector,
+                         max_bytes: int = 50 * 1024 * 1024) -> list[RecordIdentity]:
     """Build per-output-locator identity evidence from a supported file."""
     if path.is_symlink() or path.suffix.lower() not in SUPPORTED:
         return []
     try:
-        text = decode_input(path.read_bytes())
+        text = decode_input(read_regular_file(path, max_bytes))
         suffix = path.suffix.lower()
         if suffix in {".csv", ".tsv"}:
             rows = list(csv.reader(text.splitlines(), delimiter="\t" if suffix == ".tsv" else ",", strict=True))
@@ -411,7 +413,7 @@ def extract_records(input_dir: Path, detector: PIIDetector, max_bytes: int = 50 
                 if path.is_symlink() or path.stat().st_size > max_bytes:
                     continue
                 rel = path.relative_to(input_dir).as_posix()
-                records.extend(extract_file_records(path, rel, detector))
+                records.extend(extract_file_records(path, rel, detector, max_bytes))
             except OSError:
                 continue
     return sorted(records, key=lambda item: (item.file, item.loc))
