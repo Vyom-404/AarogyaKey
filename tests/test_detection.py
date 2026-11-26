@@ -225,3 +225,12 @@ class DetectionTests(unittest.TestCase):
         self.assertIn("[PATIENT_NAME]", decoded)
         self.assertIn("HbA1c 7.2%", decoded)
         self.assertTrue(any(hit.method.startswith("base64_decoded_") for hit in hits))
+
+    def test_name_matching_handles_punctuation_separators(self) -> None:
+        self.detector.add_name("Aarav Kulkarni")
+        self.assertIn("[PATIENT_NAME]", self.detector.sanitize("Patient: Aarav_Kulkarni")[0])
+
+    def test_suspicious_header_or_json_key_is_redacted_but_schema_is_kept(self) -> None:
+        self.assertEqual(self.detector.sanitize_header_or_key("Aarav Sharma")[0], "[PATIENT_NAME]")
+        self.assertEqual(self.detector.sanitize_header_or_key("Patient Name")[0], "Patient Name")
+        self.assertEqual(self.detector.sanitize_header_or_key("Blood Pressure")[0], "Blood Pressure")
