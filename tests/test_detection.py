@@ -204,3 +204,24 @@ class DetectionTests(unittest.TestCase):
     def test_medical_spans_are_not_reported_as_person_detections(self) -> None:
         self.detector.add_name("Fever Patient")
         self.assertEqual(self.categories("Complaint: fever; dose 5 mg"), set())
+
+    def test_medical_structured_fields_are_preserved(self) -> None:
+        values = [
+            ("A1C-2026-07", "diagnosis_code"),
+            ("Aarav Kulkarni", "doctor_name"),
+            ("District Hospital North", "hospital_name"),
+            ("History of Dengue", "history"),
+        ]
+        for value, field in values:
+            with self.subTest(field=field):
+                self.assertEqual(self.detector.sanitize(value, field)[0], value)
+        self.assertEqual(self.detector.sanitize("Diagnosis code: E11.9")[0], "Diagnosis code: E11.9")
+
+    def test_base64_text_attachment_is_sanitized(self) -> None:
+        encoded = base64.b64encode(b"Patient: Aarav Kulkarni; HbA1c 7.2%").decode("ascii")
+        output, hits = self.detector.sanitize("attachment=" + encoded)
+        self.assertNotIn(encoded, output)
+        decoded = base64.b64decode(output.split("=", 1)[1]).decode("utf-8")
+        self.assertIn("[PATIENT_NAME]", decoded)
+        self.assertIn("HbA1c 7.2%", decoded)
+        self.assertTrue(any(hit.method.startswith("base64_decoded_") for hit in hits))
