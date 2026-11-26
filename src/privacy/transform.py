@@ -142,4 +142,56 @@ def build_privacy_actions(records: list[PrivacyRecord], pseudonyms: dict[tuple[s
             if field.path:
                 action_values[ref][field.path] = replacement
 
+    # Risk-based precision reduction: first bucket stay length for small
+    # extended-profile classes; then generalize only rare diagnoses in those
+    # still-low-k profiles. Common diagnoses are left intact.
+    dimensions = ("age", "locality", "tehsil", "district", "pin", "event_date", "stay", "diagnosis", "hospital")
+    def class_counts() -> tuple[Counter[tuple[str, ...]], dict[tuple[str, str], tuple[str, ...]]]:
+        signatures = {ref: _tuple(item, dimensions, action_values) for ref, item in record_by_ref.items()}
+        return Counter(signatures.values()), signatures
+
+    for _ in range(2):
+        counts, signatures = class_counts()
+        changed = False
+        for ref, item in record_by_ref.items():
+            if counts[signatures[ref]] >= minimum_k:
+                continue
+            for field in item.fields:
+                if field.kind == "stay":
+                    replacement = generalize_stay(field.value)
+                    key = (item.file, item.loc, field.path, field.kind)
+                    existing = action_by_field.get(key)
+                    if replacement and replacement != field.value and (existing is None or existing.action != "generalized_stay"):
+                        action = PrivacyAction(item.file, item.loc, field.kind, field.path, replacement,
+                                               "generalized_stay", "", 0, field.span, "before")
+                        if existing:
+                            grouped[ref].remove(existing)
+                        grouped[ref].append(action)
+                        action_by_field[key] = action
+                        if field.path:
+                            action_values[ref][field.path] = replacement
+                        changed = True
+                elif (field.kind == "diagnosis" and rare_diagnosis_action in {"generalize", "suppress"}
+                      and diagnosis_counts[normalize_text(field.value)] <= rare_count_max):
+                    replacement = _rare_diagnosis_replacement(field.value)
+                    if not replacement:
+                        continue
+                    if rare_diagnosis_action == "suppress":
+                        replacement = "[DIAGNOSIS SUPPRESSED]"
+                    key = (item.file, item.loc, field.path, field.kind)
+                    existing = action_by_field.get(key)
+                    if existing is None or existing.action != "generalized_diagnosis":
+                        action = PrivacyAction(item.file, item.loc, field.kind, field.path,
+                                               replacement,
+                                               "generalized_diagnosis", "", 0, field.span, "before")
+                        if existing:
+                            grouped[ref].remove(existing)
+                        grouped[ref].append(action)
+                        action_by_field[key] = action
+                        if field.path:
+                            action_values[ref][field.path] = action.replacement
+                        changed = True
+        if not changed:
+            break
+
     return {ref: actions for ref, actions in grouped.items()}
