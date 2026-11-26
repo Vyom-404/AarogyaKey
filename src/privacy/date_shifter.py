@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import datetime as dt
 import hmac
 import re
@@ -120,6 +121,12 @@ def month_precision(value: str) -> str:
     """Return a month-level value for an unresolved record without keeping its day."""
     parsed = parse_date(value)
     if parsed is None:
+        # Malformed ISO calendar dates cannot be shifted as real dates. Keep
+        # only their valid year/month so impossible day tokens do not pass
+        # through unchanged as quasi-identifiers.
+        coarse = invalid_iso_month(value)
+        if coarse:
+            return coarse
         return value
     if parsed.format_name == "%d/%m/%Y" or parsed.format_name == "%d/%m/%y":
         return parsed.value.strftime("%m/%Y")
@@ -136,3 +143,16 @@ def month_precision(value: str) -> str:
     if parsed.has_time:
         return parsed.value.strftime("%Y-%m")
     return parsed.value.strftime("%Y-%m")
+
+
+def invalid_iso_month(value: str) -> str | None:
+    """Return a month for an ISO-like date with a valid month but impossible day."""
+    match = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})", value.strip())
+    if not match:
+        return None
+    year, month, day = map(int, match.groups())
+    if not 1 <= month <= 12:
+        return None
+    if 1 <= day <= calendar.monthrange(year, month)[1]:
+        return None
+    return f"{year:04d}-{month:02d}"

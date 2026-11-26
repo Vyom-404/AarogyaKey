@@ -57,4 +57,17 @@ class DateShiftTests(unittest.TestCase):
                                         {"unresolved_date_precision": "year"})
         self.assertEqual(actions[(record.file, record.loc)][0].replacement, "2025")
 
+    def test_impossible_iso_calendar_date_is_reduced_to_month(self) -> None:
+        self.assertEqual(month_precision("2026-02-31"), "2026-02")
+        self.assertEqual(month_precision("2026-13-31"), "2026-13-31")
+        with tempfile.TemporaryDirectory() as input_dir, tempfile.TemporaryDirectory() as output_parent:
+            source = Path(input_dir) / "note.txt"
+            source.write_text("Visit Date: 2026-02-31\nDiagnosis: asthma\n", encoding="utf-8")
+            output = Path(output_parent) / "out"
+            report = run_pipeline(Path(input_dir), output, "phase6_1 malformed date test secret")
+            clean = (output / "sanitized/note.txt").read_text(encoding="utf-8")
+            self.assertIn("2026-02", clean)
+            self.assertNotIn("2026-02-31", clean)
+            self.assertEqual(report["privacy"]["actions"]["generalized_invalid_date"], 1)
+
 

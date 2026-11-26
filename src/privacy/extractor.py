@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from src.linkage.extractor import decode_input
-from src.privacy.date_shifter import parse_date
+from src.privacy.date_shifter import invalid_iso_month, parse_date
 from src.security.filesystem import read_regular_file
 
 SUPPORTED = {".csv", ".tsv", ".json", ".txt"}
@@ -172,7 +172,7 @@ def _text_fields(record: PrivacyRecord, text: str) -> None:
             right = left + len(raw)
             if kind in {"event_date", "dob"}:
                 date_match = next((candidate for candidate in _DATE_VALUE.finditer(raw)
-                                   if parse_date(candidate.group())), None)
+                                   if parse_date(candidate.group()) or invalid_iso_month(candidate.group())), None)
                 if date_match is None and kind == "event_date":
                     date_match = next((candidate for candidate in _MONTH_VALUE.finditer(raw)
                                        if _valid_month_value(candidate.group())), None)

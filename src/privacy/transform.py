@@ -84,10 +84,16 @@ def build_privacy_actions(records: list[PrivacyRecord], pseudonyms: dict[tuple[s
             stage = "after"
             marker = ""
             if field.kind == "event_date":
-                replacement = _replacement_for_date(field.value, patient, shifter, unresolved_precision)
-                if replacement is None or replacement == field.value:
-                    continue
-                action = "shifted_date" if patient else "generalized_date"
+                if parse_date(field.value) is None:
+                    replacement = month_precision(field.value)
+                    if replacement == field.value:
+                        continue
+                    action = "generalized_invalid_date"
+                else:
+                    replacement = _replacement_for_date(field.value, patient, shifter, unresolved_precision)
+                    if replacement is None or replacement == field.value:
+                        continue
+                    action = "shifted_date" if patient else "generalized_date"
                 stage = "before"
             elif field.kind == "age":
                 replacement = generalize_age(field.value, width, senior_from, minor_bounds)
