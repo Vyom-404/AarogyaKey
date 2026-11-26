@@ -55,3 +55,75 @@ class DateShifter:
 
     def shift(self, value: dt.date | dt.datetime, patient_pseudonym: str) -> dt.date | dt.datetime:
         return value + dt.timedelta(days=self.offset_days(patient_pseudonym))
+
+
+def parse_date(value: str) -> ParsedDate | None:
+    """Parse a full calendar date, preferring Indian day/month ordering."""
+    text = value.strip()
+    timestamp = _ISO_TIMESTAMP.fullmatch(text)
+    if timestamp:
+        date_part, separator, time_part, zone = timestamp.groups()
+        try:
+            date = dt.date.fromisoformat(date_part)
+            time_value = dt.time.fromisoformat(time_part)
+            parsed = dt.datetime.combine(date, time_value)
+            suffix = ("Z" if zone == "Z" else "") if zone else ""
+            if zone and zone != "Z":
+                normalized_zone = zone if ":" in zone else zone[:3] + ":" + zone[3:]
+                parsed = dt.datetime.fromisoformat(date_part + "T" + time_part + normalized_zone)
+                suffix = normalized_zone
+            return ParsedDate(parsed, "iso-timestamp", True, suffix)
+        except ValueError:
+            return None
+    for fmt, pattern in _DATE_FORMATS:
+        match = pattern.fullmatch(text)
+        if not match:
+            continue
+        try:
+            return ParsedDate(dt.datetime.strptime(match.group(1), fmt), fmt)
+        except ValueError:
+            continue
+    match = _MONTH_WORD.fullmatch(text)
+    if match:
+        for fmt in ("%d %B %Y", "%d %b %Y"):
+            try:
+                return ParsedDate(dt.datetime.strptime(match.group(1), fmt), fmt)
+            except ValueError:
+                pass
+    return None
+
+
+def format_date(value: dt.date | dt.datetime, parsed: ParsedDate, original: str) -> str:
+    if parsed.has_time:
+        date_part, separator, rest = original.partition("T")
+        if not separator:
+            date_part, separator, rest = original.partition(" ")
+        shifted = value.strftime("%Y-%m-%d")
+        return shifted + separator + rest if separator else shifted
+    if parsed.format_name in {"%d/%m/%Y", "%d/%m/%y", "%d-%m-%Y", "%d-%m-%y", "%d.%m.%Y"}:
+        fmt = parsed.format_name
+    elif parsed.format_name == "%Y/%m/%d":
+        fmt = "%Y/%m/%d"
+    elif parsed.format_name in {"%d %B %Y", "%d %b %Y"}:
+        fmt = parsed.format_name
+    else:
+        fmt = "%Y-%m-%d"
+    return value.strftime(fmt)
+
+
+def month_precision(value: str) -> str:
+    """Return a month-level value for an unresolved record without keeping its day."""
+    parsed = parse_date(value)
+    if parsed is None:
+        return value
+    if parsed.format_name == "%d/%m/%Y" or parsed.format_name == "%d/%m/%y":
+        return parsed.value.strftime("%m/%Y")
+    if parsed.format_name in {"%d-%m-%Y", "%d-%m-%y"}:
+        return parsed.value.strftime("%m-%Y")
+    if parsed.format_name == "%d.%m.%Y":
+        return parsed.value.strftime("%m.%Y")
+    if parsed.format_name in {"%d %B %Y", "%d %b %Y"}:
+        return parsed.value.strftime("%B %Y")
+    if parsed.has_time:
+        return parsed.value.strftime("%Y-%m")
+    return parsed.value.strftime("%Y-%m")
