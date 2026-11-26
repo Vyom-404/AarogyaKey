@@ -36,3 +36,38 @@ The final checker retained all 4,855/4,855 medical preservation probes. The fina
 
 During iteration, a broad city-field experiment removed 83 preservation probes; it was narrowed to demographic city values with village-like morphology and evaluated again. A later contextual-name change removed two `ASHA` clinical references. Inspection found a substring cue treating “patients” as the identity word “patient.” The cue now requires a word boundary; both references survive and the final medical score returned to 100%. The final run has **zero failed medical probes and zero checker-reported clinical false positives**. These two interim regressions are documented here rather than hidden.
 
+## Residual leaks and false positives
+
+- **Remaining practice leaks:** none detected by the official practice checker (0/3,230). No PII category or hiding channel had a visible practice surface.
+- **Remaining practice canaries:** none visible (0/4 found in output).
+- **Remaining practice medical false positives:** none reported (4,855/4,855 preserved).
+- **Known limitations outside this practice set:** an unfamiliar identifier format without a label or known structured field may be missed; names with unseen transliterations or unusual tokenization may not match; city/village morphology is language- and region-dependent; and a name that is also a clinical term can still be ambiguous without reliable context. These are residual model limitations, not observed failures in the final checker run.
+- **Scope not covered:** records are not linked or pseudonymized. The checker consequently reports linkage precision, recall, and F0.5 as 0.00. That is expected at this phase and is not counted as a Phase 2.1 PII leak result.
+
+## Regression tests and checks
+
+The test suite now contains 36 tests. New cases cover contextual Hindi age labels, patient names before S/o/D/o/W/o, C/o ambiguity, Hinglish kinship forms and note references, clinical-name negatives, compact and nested MRNs, FHIR encounter identifiers, metadata paths, nested address fields, demographic village-like city values, and identifier-bearing headers. Both positive and negative examples are included; the tests use synthetic identities.
+
+Commands run from `doctor/`:
+
+```text
+python3 -m unittest discover -s tests -q                 # 36 passed
+python3 -m compileall -q src main.py                     # passed
+RAKSHA_SECRET=phase2-1-local python3 main.py --input .local-evaluation/official-kit/dev/input --output /private/tmp/raksha-phase2-1-final5
+python3 .local-evaluation/official-kit/validate_output.py --input .local-evaluation/official-kit/dev/input --output /private/tmp/raksha-phase2-1-final5  # CONTRACT OK
+python3 .local-evaluation/official-kit/check_dev.py --output /private/tmp/raksha-phase2-1-final5  # 0 leaks; 0/4 canary surfaces; 4,855/4,855 preserved
+python3 .local-evaluation/official-kit/check_submission.py --repo . --run
+```
+
+The submission checker prints `READY TO SUBMIT` with one warning: output is identical under different `RAKSHA_SECRET` values. Keyed pseudonyms and date shifts are outside this phase. It also counts the practice fixture's scanned discharge PDF as the Project Brief PDF; that is a fixture false positive and does not verify a real two-page brief.
+
+## Changed files
+
+- `src/detection/detector.py` — contextual rules, identifier shapes, scoped name matching, and explainable detection spans.
+- `src/detection/medical.py` — protected clinical terminology used by the contextual detector.
+- `src/pipeline.py` — nested JSON, FHIR identifier, metadata, patient-name and demographic locality context.
+- `tests/test_detection.py` and `tests/test_pipeline.py` — synthetic regression coverage.
+- `docs/PHASE2_1_EVALUATION.md` — this measured evaluation.
+- `docs/IMPLEMENTATION_PLAN.md` and `README.md` — current phase status and evaluation links.
+
+The organizer kit under `.local-evaluation/official-kit/` was not modified. A zero practice leakage result does not prove performance on hidden, real, or adversarially different records.
