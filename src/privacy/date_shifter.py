@@ -103,6 +103,9 @@ def format_date(value: dt.date | dt.datetime, parsed: ParsedDate, original: str)
             date_part, separator, rest = original.partition(" ")
         shifted = value.strftime("%Y-%m-%d")
         return shifted + separator + rest if separator else shifted
+    if parsed.format_name in {"%m/%d/%Y", "%m-%d-%Y"}:
+        # The shifted month/day form could be re-read as Indian day/month.
+        return value.strftime("%Y-%m-%d")
     if parsed.format_name in {"%d/%m/%Y", "%d/%m/%y", "%d-%m-%Y", "%d-%m-%y", "%d.%m.%Y"}:
         fmt = parsed.format_name
     elif parsed.format_name == "%Y/%m/%d":
