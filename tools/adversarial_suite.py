@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import base64
 import csv
+import datetime as dt
 import json
 import random
 import os
@@ -53,7 +54,8 @@ def _write(path: Path, content: str | bytes) -> None:
     path.write_bytes(content.encode("utf-8") if isinstance(content, str) else content)
 
 
-def generate_corpus(root: Path, seed: int, oversized_limit: int = 1_000_000) -> dict[str, Any]:
+def generate_corpus(root: Path, seed: int, oversized_limit: int = 1_000_000,
+                    vary_profiles: bool = False) -> dict[str, Any]:
     """Create files plus an in-memory truth manifest; the manifest is never saved."""
     rng = random.Random(seed)
     source = root / "input"
@@ -64,9 +66,15 @@ def generate_corpus(root: Path, seed: int, oversized_limit: int = 1_000_000) -> 
     csv_rows = ["patient_name,mrn,phone,aadhaar,abha,pan,insurance_id,age,village,district,pin,diagnosis,medicine,dose"]
     json_records: list[dict[str, Any]] = []
     notes: list[str] = []
+    profile_offset = rng.randrange(8 * 8) if vary_profiles else 0
+    village_roots = ("Basantpur", "Devnagar", "Haripura", "Keshavgram", "Madhopur", "Nandgaon")
+    district_names = ("Shivgarh", "Ratanpur", "Malvan", "Suryanagar")
+    diagnosis_names = ("Dengue", "Asthma", "Type 2 diabetes", "Migraine", "Pneumonia", "Anemia")
+    timeline_start = dt.date(2021 + seed % 4, 1, 1) + dt.timedelta(days=seed % 280)
     for index in range(16):
-        latin, devanagari = generated_name(rng, index)
-        relative, _ = generated_name(rng, index + 37)
+        name_index = index + profile_offset
+        latin, devanagari = generated_name(rng, name_index)
+        relative, _ = generated_name(rng, name_index + 37)
         numeric = rng.randrange(10**9, 10**10)
         phone = f"+91 {numeric // 10**7:03d} {numeric // 10**4 % 1000:03d} {numeric % 10000:04d}"
         aadhaar = f"{rng.randrange(10**11, 10**12)}"
@@ -74,34 +82,39 @@ def generate_corpus(root: Path, seed: int, oversized_limit: int = 1_000_000) -> 
         pan = f"{''.join(rng.choice('ABCDEFGHJKLMNPQRSTUVWXYZ') for _ in range(5))}{rng.randrange(1000,10000)}{rng.choice('ABCDEFGHJKLMNPQRSTUVWXYZ')}"
         mrn = f"QX-{seed % 1000:03d}-{index:04d}"
         policy_id = f"INS-{seed % 1000:03d}-{index:04d}-ZX"
-        village = f"Kiranpur{index:02d}"
-        hospital = f"Facility-{index % 3}"
-        diagnosis = "Dengue" if index % 4 else "Asthma"
-        clinician, _ = generated_name(rng, index + 71)
+        village = (f"{village_roots[(index + seed) % len(village_roots)]}{index:02d}"
+                   if vary_profiles else f"Kiranpur{index:02d}")
+        district = district_names[(index + seed // 7) % len(district_names)] if vary_profiles else "Nandipur"
+        hospital = f"Facility-{(index + seed) % 5}" if vary_profiles else f"Facility-{index % 3}"
+        diagnosis = (diagnosis_names[(index + seed // 11) % len(diagnosis_names)]
+                     if vary_profiles else ("Dengue" if index % 4 else "Asthma"))
+        age = (18 + ((index * 7 + seed) % 73)) if vary_profiles else 21 + index
+        admission = timeline_start + dt.timedelta(days=index * 29)
+        clinician, _ = generated_name(rng, name_index + 71)
         clinicians.append(clinician)
         phone_digits = re.sub(r"\D", "", phone)
         identities.append({"name": latin, "deva": devanagari, "relative": relative, "phone": phone,
                            "aadhaar": aadhaar, "abha": abha, "pan": pan, "mrn": mrn,
                            "insurance": policy_id, "patient_key": f"PT-{seed}-{index}"})
         csv_rows.append(",".join((latin, mrn, phone, aadhaar, abha, pan, policy_id,
-                                  str(21 + index), village, "Nandipur", f"41{index:04d}",
+                                  str(age), village, district, f"{(41 + seed % 40):02d}{index:04d}",
                                   diagnosis, "Metformin 500 mg", "1-0-1", latin)))
-        profile = {"patient_key": f"PT-{seed}-{index}", "age": 21 + index, "village": village,
-                   "district": "Nandipur", "pin": f"41{index:04d}", "hospital": hospital,
-                   "admission_date": f"2026-{(index % 9) + 1:02d}-{(index % 20) + 1:02d}",
+        profile = {"patient_key": f"PT-{seed}-{index}", "age": age, "village": village,
+                   "district": district, "pin": f"{(41 + seed % 40):02d}{index:04d}", "hospital": hospital,
+                   "admission_date": admission.isoformat() if vary_profiles else f"2026-{(index % 9) + 1:02d}-{(index % 20) + 1:02d}",
                    "diagnosis": diagnosis, "stay_duration": "3 days"}
         qi_profiles.append(profile)
         json_records.append({
             "patient": {"name": {"text": devanagari}, "identifier": [{"type": {"text": "Medical record number"}, "value": mrn}]},
             "identifiers": {"abha_number": abha, "insurance_id": policy_id, "pan": pan},
             "metadata": {"source_path": f"/intake/{latin.replace(' ', '_')}/{phone_digits}/export"},
-            "age": 21 + index, "village": village, "district": "Nandipur", "pin": f"41{index:04d}",
-            "hospital": hospital, "admission_date": f"2026-{(index % 9) + 1:02d}-{(index % 20) + 1:02d}",
-            "discharge_date": f"2026-{(index % 9) + 1:02d}-{(index % 20) + 4:02d}",
+            "age": age, "village": village, "district": district, "pin": f"{(41 + seed % 40):02d}{index:04d}",
+            "hospital": hospital, "admission_date": admission.isoformat() if vary_profiles else f"2026-{(index % 9) + 1:02d}-{(index % 20) + 1:02d}",
+            "discharge_date": (admission + dt.timedelta(days=3)).isoformat() if vary_profiles else f"2026-{(index % 9) + 1:02d}-{(index % 20) + 4:02d}",
             "visits": [
-                {"visit_date": f"2026-{(index % 9) + 1:02d}-{(index % 20) + 1:02d}", "diagnosis": diagnosis,
+                {"visit_date": admission.isoformat() if vary_profiles else f"2026-{(index % 9) + 1:02d}-{(index % 20) + 1:02d}", "diagnosis": diagnosis,
                  "stay_duration": "3 days"},
-                {"visit_date": f"2026-{(index % 9) + 1:02d}-{(index % 20) + 21:02d}", "diagnosis": diagnosis,
+                {"visit_date": (admission + dt.timedelta(days=20)).isoformat() if vary_profiles else f"2026-{(index % 9) + 1:02d}-{(index % 20) + 21:02d}", "diagnosis": diagnosis,
                  "stay_duration": "2 days"},
             ],
             "stay_duration": "3 days", "diagnosis": diagnosis,
@@ -270,14 +283,31 @@ def linkage_scenarios(seed: int) -> dict[str, Any]:
 
 
 def _risk_summary(records: list[Any]) -> dict[str, Any]:
-    dimensions = ("age", "locality", "tehsil", "district", "pin", "event_date_exact", "stay", "diagnosis", "hospital")
-    groups: Counter[tuple[str, ...]] = Counter(_tuple(record, dimensions) for record in records)
-    unique = sum(size == 1 for size in groups.values())
-    return {"records": len(records), "equivalence_classes": len(groups), "unique_records": unique,
-            "unique_record_percent": round(100 * unique / len(records), 2) if records else 0.0,
-            "class_sizes": {"1": sum(size == 1 for size in groups.values()),
-                            "2": sum(size == 2 for size in groups.values()),
-                            "3_plus": sum(size >= 3 for size in groups.values())}}
+    profiles = {
+        "age": ("age",), "locality": ("locality",), "district": ("district",),
+        "pin": ("pin",), "hospital": ("hospital",), "exact_dates": ("event_date_exact",),
+        "stay": ("stay",), "diagnosis": ("diagnosis",),
+        "age_geography_hospital": ("age", "locality", "tehsil", "district", "pin", "hospital"),
+        "age_geography_date": ("age", "locality", "tehsil", "district", "pin", "event_date_exact"),
+        "age_date_diagnosis_hospital": ("age", "event_date_exact", "diagnosis", "hospital"),
+        "broad_profile": ("age", "locality", "tehsil", "district", "pin", "event_date_exact",
+                          "stay", "diagnosis", "hospital"),
+    }
+
+    def stats(dimensions: tuple[str, ...]) -> dict[str, Any]:
+        groups: Counter[tuple[str, ...]] = Counter(_tuple(record, dimensions) for record in records)
+        record_sizes = [groups[_tuple(record, dimensions)] for record in records]
+        unique = sum(size == 1 for size in record_sizes)
+        return {"equivalence_classes": len(groups), "unique_records": unique,
+                "unique_record_percent": round(100 * unique / len(records), 2) if records else 0.0,
+                "records_by_class_size": {"1": sum(size == 1 for size in record_sizes),
+                                          "2": sum(size == 2 for size in record_sizes),
+                                          "3": sum(size == 3 for size in record_sizes),
+                                          "4": sum(size == 4 for size in record_sizes),
+                                          "5_plus": sum(size >= 5 for size in record_sizes)}}
+
+    return {"records": len(records), "profiles": {name: stats(dimensions)
+            for name, dimensions in profiles.items()}}
 
 
 def _attacker_simulation(profiles: list[dict[str, Any]], sanitized: list[dict[str, Any]], seed: int) -> dict[str, Any]:
@@ -353,10 +383,10 @@ def _attacker_simulation(profiles: list[dict[str, Any]], sanitized: list[dict[st
             "exact_known_admission_date_matches_after_shift": date_matches}
 
 
-def run_seed(seed: int) -> dict[str, Any]:
+def run_seed(seed: int, vary_profiles: bool = False) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="raksha-adversarial-") as temporary:
         work = Path(temporary)
-        manifest = generate_corpus(work, seed)
+        manifest = generate_corpus(work, seed, vary_profiles=vary_profiles)
         source: Path = manifest["source"]
         output = work / "output"
         secret = f"synthetic adversarial run secret {seed:08d}"
@@ -431,15 +461,25 @@ def run_seed(seed: int) -> dict[str, Any]:
         before = [before_by_ref[key] for key in sorted(common)]
         after = [after_by_ref[key] for key in sorted(common)]
         sanitized_json = json.loads((output / "sanitized/records/nested.json").read_text(encoding="utf-8"))["records"]
+        def count_key(node: Any, wanted: str) -> int:
+            if isinstance(node, dict):
+                return sum(int(str(key).casefold() == wanted) + count_key(value, wanted)
+                           for key, value in node.items())
+            if isinstance(node, list):
+                return sum(count_key(value, wanted) for value in node)
+            return 0
+
+        stay_key_count = count_key(sanitized_json, "stay_duration")
         attacker = _attacker_simulation(manifest["qi_profiles"], sanitized_json, seed)
         linkage = linkage_scenarios(seed)
         report_path = output / "report.json"
         return {
             "seed": seed,
-            "generator_version": "phase6-synthetic-v1",
+            "generator_version": "phase6-synthetic-v1-varied" if vary_profiles else "phase6-synthetic-v1",
             "pipeline_exit": pipeline_exit,
             "files": {"input": len(report["files"]), "sanitized": report["counts"]["files_sanitized"],
                       "quarantined": len(quarantined), "records": report["counts"]["records_processed"]},
+            "privacy_action_counts": report.get("privacy", {}).get("actions", {}),
             "pii_surface_leak_counts_by_generated_field": dict(sorted(leaks.items())),
             "pii_surface_leak_total": sum(leaks.values()),
             "pii_surface_leak_channels": dict(sorted(leak_channels.items())),
@@ -447,6 +487,10 @@ def run_seed(seed: int) -> dict[str, Any]:
             "clinical_probes_retained": retained_clinical,
             "clinical_probe_total": len(manifest["clinical"]),
             "clinical_probes_missing": missing_clinical,
+            "stay_duration_fields_preserved": stay_key_count,
+            "stay_duration_fields_generalized": report.get("privacy", {}).get("actions", {}).get("generalized_stay", 0),
+            "impossible_calendar_dates_generalized": report.get("privacy", {}).get("actions", {}).get(
+                "generalized_invalid_date", 0),
             "clinician_names_preserved": len(manifest["clinicians"]) - len(missing_clinicians),
             "clinician_name_total": len(manifest["clinicians"]),
             "quarantined_input_count": len(quarantined),
@@ -468,11 +512,14 @@ def run_seed(seed: int) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seeds", nargs="+", type=int, default=[61027, 93811])
+    parser.add_argument("--varied-seeds", nargs="+", type=int, default=[],
+                        help="run independently varied names, locations, ages, dates and diagnoses")
     parser.add_argument("--summary", type=Path, help="write aggregate JSON summary (no generated PII)")
     args = parser.parse_args()
     summaries = [run_seed(seed) for seed in args.seeds]
+    summaries.extend(run_seed(seed, vary_profiles=True) for seed in args.varied_seeds)
     payload = {"suite": "Secret Wards independent adversarial suite", "version": "phase6-synthetic-v1",
-               "seeds": args.seeds, "runs": summaries}
+               "seeds": args.seeds, "varied_seeds": args.varied_seeds, "runs": summaries}
     rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     if args.summary:
         args.summary.parent.mkdir(parents=True, exist_ok=True)
