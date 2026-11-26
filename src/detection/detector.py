@@ -103,6 +103,7 @@ _SCHEMA_WORDS = {
     "result", "blood", "pressure", "village", "district", "city", "pin", "code", "ward", "house",
     "relative", "guardian", "father", "mother", "husband", "wife", "insurance", "policy", "claim",
     "department", "procedure", "history", "symptom", "complaint", "unit", "value", "reference",
+    "stay", "duration", "length",
     "source", "path", "metadata", "meta", "author", "created", "updated", "uploaded", "raised",
     "reported", "entered", "submitted", "by", "sender", "recipient", "attendant", "visitor",
     "caregiver", "informant", "city", "town", "district", "state", "zip", "postal", "pmjay",
@@ -542,6 +543,8 @@ class PIIDetector:
 
     def sanitize_header_or_key(self, value: str) -> tuple[str, list[Detection]]:
         tokens = [token.casefold() for token in _TOKEN.findall(value)]
+        if re.fullmatch(r"(?i)(?:stay[_\W]+duration|hospital[_\W]+stay|length[_\W]+of[_\W]+stay)", value.strip()):
+            return value, []
         if 1 <= len(tokens) <= 4 and set(tokens).issubset(_SCHEMA_WORDS):
             return value, []
         if self.is_known_person(value):
