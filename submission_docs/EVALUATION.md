@@ -42,7 +42,11 @@ The synthetic auxiliary-registry attack showed a fall in unique matches after sa
 - Practice checker: 0/3,230 PII, 0/4 canaries, 4,855/4,855 probes, precision 1.00 / recall 0.26 / F0.5 0.63, no wrong merges or raw copies.
 - Independent adversarial suite: four runs completed successfully with results summarized above.
 
-The checker printed “Project Brief PDF found” because it recursively found an ignored scanned-practice PDF under `.local-evaluation/official-kit/dev/input/`. That file is organizer fixture data, not a team brief and is absent from tracked repository files. The organizer requires a separate 2-page Project Brief PDF alongside the repository link. It is not included here, so the repository can pass the software checks but the complete submission package is **not yet ready** until the real brief is prepared and submitted.
+The checker printed “Project Brief PDF found” because it recursively found an ignored scanned-practice PDF under `.local-evaluation/official-kit/dev/input/`. That is organizer fixture data, not a team brief. The checker accepts any `.pdf` recursively under the repo except files under top-level `dev`, `.git`, and `.venv`; it does not inspect filename, page count, or content. Official written requirements specify a maximum two-page A4 PDF and readable text of at least 10 pt, but no exact filename or directory. The prepared brief is `submission_docs/PROJECT_BRIEF.pdf`.
+
+To isolate the checker from the organizer fixture, a clean staging copy was built with only tracked project files and the intended brief PDF. The checker identified exactly `submission_docs/PROJECT_BRIEF.pdf`; its three configured runs passed, including contract, determinism, changed-secret, and unchanged-input checks. The PDF itself was verified as two A4 pages, and known practice surfaces and canaries were not found in its extracted text.
+
+The software and brief file pass the checks performed, but the **complete submission package is not ready until the team member names are filled in** on the marked field and the final PDF is rechecked. The checker cannot detect this missing team detail.
 
 ## Limitations and failures
 
@@ -52,4 +56,4 @@ The checker printed “Project Brief PDF found” because it recursively found a
 - There is no universal output PII scanner for arbitrary new schemas or opaque attachments.
 - At-rest encryption is not used for current in-memory intermediates; Python memory/swap and secure erasure are outside the guarantees.
 - Local CPU/RSS measurements do not establish the organizer's whole-process-tree maximum resource behavior on hidden input.
-- The actual required Project Brief PDF and its member list were not available in tracked project files during this audit.
+- Team member names were not available during this audit; the PDF intentionally marks that field for completion rather than inventing identities.
