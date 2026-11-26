@@ -89,3 +89,18 @@ class DetectionTests(unittest.TestCase):
         ):
             with self.subTest(category=category):
                 self.assertIn(category, self.categories(sample))
+
+    def test_indian_identity_fields_and_location_aliases(self) -> None:
+        for field, category in (
+            ("pmjay_id", "INSURANCE_ID"), ("hospital_uhid", "MRN"),
+            ("patient_ref", "MRN"), ("accession_number", "MRN"),
+            ("source_path", "METADATA"), ("Zip", "PIN"),
+            ("pita_name", "RELATIVE_NAME"),
+        ):
+            with self.subTest(field=field):
+                self.assertEqual(field_category(field), category)
+
+    def test_name_anchors_cover_honorific_and_age_forms(self) -> None:
+        for phrase in ("Asha ji 48 Y/F", "Mr. Aarav Kulkarni", "Smt. Kavita Rao"):
+            with self.subTest(phrase=phrase):
+                self.assertIn("PATIENT_NAME", self.categories(phrase))
