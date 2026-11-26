@@ -21,7 +21,10 @@ _DATE_FORMATS = (
     ("%Y-%m-%d", re.compile(r"(?<!\d)(\d{4}-\d{1,2}-\d{1,2})(?!\d)")),
     ("%Y/%m/%d", re.compile(r"(?<!\d)(\d{4}/\d{1,2}/\d{1,2})(?!\d)")),
     ("%d/%m/%Y", re.compile(r"(?<!\d)(\d{1,2}/\d{1,2}/\d{4})(?!\d)")),
+    # Use US month/day ordering only after the Indian day/month parser fails.
+    ("%m/%d/%Y", re.compile(r"(?<!\d)(\d{1,2}/\d{1,2}/\d{4})(?!\d)")),
     ("%d-%m-%Y", re.compile(r"(?<!\d)(\d{1,2}-\d{1,2}-\d{4})(?!\d)")),
+    ("%m-%d-%Y", re.compile(r"(?<!\d)(\d{1,2}-\d{1,2}-\d{4})(?!\d)")),
     ("%d.%m.%Y", re.compile(r"(?<!\d)(\d{1,2}\.\d{1,2}\.\d{4})(?!\d)")),
     ("%d/%m/%y", re.compile(r"(?<!\d)(\d{1,2}/\d{1,2}/\d{2})(?!\d)")),
     ("%d-%m-%y", re.compile(r"(?<!\d)(\d{1,2}-\d{1,2}-\d{2})(?!\d)")),
