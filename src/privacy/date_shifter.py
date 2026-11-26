@@ -121,7 +121,11 @@ def month_precision(value: str) -> str:
         return value
     if parsed.format_name == "%d/%m/%Y" or parsed.format_name == "%d/%m/%y":
         return parsed.value.strftime("%m/%Y")
+    if parsed.format_name == "%m/%d/%Y":
+        return parsed.value.strftime("%m/%Y")
     if parsed.format_name in {"%d-%m-%Y", "%d-%m-%y"}:
+        return parsed.value.strftime("%m-%Y")
+    if parsed.format_name == "%m-%d-%Y":
         return parsed.value.strftime("%m-%Y")
     if parsed.format_name == "%d.%m.%Y":
         return parsed.value.strftime("%m.%Y")
