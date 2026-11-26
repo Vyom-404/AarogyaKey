@@ -1,6 +1,6 @@
 # Secret Wards
 
-This repository is the team's implementation for the Secret Wards privacy firewall challenge. It runs offline with Python 3 and the standard library. Phase 2.1 adds residual leakage fixes and contextual medical-integrity safeguards to multilingual detection. The official practice run measured 0/3,230 visible PII pieces and 4,855/4,855 medical probes preserved; this is not a hidden-data guarantee. See [`docs/PHASE2_1_EVALUATION.md`](docs/PHASE2_1_EVALUATION.md) for the full comparison, failed-case history, limitations, and checks.
+This repository is the team's implementation for the Secret Wards privacy firewall challenge. It runs offline with Python 3 and the `cryptography` package for AES-GCM. Phase 2.1 adds residual leakage fixes and contextual medical-integrity safeguards to multilingual detection. Phase 5 adds domain-separated keys, authenticated-encryption support for sensitive persisted intermediates, privacy-safe structured logs, bounded no-follow input reads, and private output writes. Practice metrics and limitations are recorded in the local, git-ignored `docs/` folder; they are not hidden-data guarantees.
 
 ## Run
 
@@ -14,7 +14,7 @@ The output directory must be new or empty and must be outside the input director
 
 ## Configuration and dependencies
 
-Safety limits are in `config/policy.yaml`. The current implementation uses only the Python standard library; `requirements.txt` is intentionally empty. `raksha.toml` contains the organizer run command and uses `python3` for portability in this workspace.
+Safety limits are in `config/policy.yaml`. Install the maintained AES-GCM dependency with `python3 -m pip install -r requirements.txt`; runtime processing is offline. `raksha.toml` contains the organizer run command and uses `python3` for portability in this workspace.
 
 ## Checks
 
@@ -39,6 +39,6 @@ The copied practice input contains a scanned PDF, so `check_submission.py` may i
 
 ## Current scope and next work
 
-Phase 1 provides recursive discovery, encoding handling, CSV/TSV/JSON/text serialization, JSON record locators, conservative quarantine, report generation, and records JSONL. Phase 2 adds Unicode/Hindi digit normalization, Devanagari transliteration keys, explainable confidence-scored detection, relationship and structured-field rules, medical-value protection, and synthetic adversarial tests. Phase 2.1 has an updated practice evaluation in [`docs/PHASE2_1_EVALUATION.md`](docs/PHASE2_1_EVALUATION.md). Patient linkage, HMAC IDs, date and age transformations, location generalization, full FHIR validation, output leakage scanning, and quasi-identifier attack measurement remain unimplemented. The practice result does not establish hidden-data performance.
+Phase 1 provides recursive discovery, encoding handling, CSV/TSV/JSON/text serialization, JSON record locators, conservative quarantine, report generation, and records JSONL. Phase 2 adds multilingual explainable detection and medical-value protection. Phase 3 adds conservative patient linkage and keyed pseudonyms; Phase 4 adds consistent date shifting, age/location generalization, and equivalence-class risk measures; Phase 5 adds key separation, an AES-GCM envelope for any required sensitive persistence, privacy-safe logs, bounded no-follow reads, and private atomic output writes. Full FHIR R4 validation and a universal automatic output PII scanner remain limitations. Practice checks do not establish hidden-data performance.
 
 See `prd.md`, `docs/WORKSPACE_AUDIT.md`, and `docs/IMPLEMENTATION_PLAN.md` for requirements and current findings.
