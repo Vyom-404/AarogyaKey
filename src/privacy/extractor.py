@@ -97,3 +97,46 @@ def _key_kind(key: str, parent: str = "") -> str | None:
     if "period" in parent_n and normalized in {"start", "end"}:
         return "event_date"
     return None
+
+
+def _record_roots(data: Any, rel: str) -> list[tuple[str, tuple[str | int, ...], Any]]:
+    if isinstance(data, dict) and str(data.get("resourceType", "")).casefold() == "bundle":
+        return [("doc", (), data)]
+    records: list[tuple[str, tuple[str | int, ...], Any]] = []
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if isinstance(value, list) and value and all(isinstance(item, dict) for item in value):
+                escaped = str(key).replace("~", "~0").replace("/", "~1")
+                records.extend((f"/{escaped}/{index}", (str(key), index), item)
+                               for index, item in enumerate(value))
+    return records or [("doc", (), data)]
+
+
+def _walk_json(record: PrivacyRecord, node: Any, path: tuple[str | int, ...] = (), parent: str = "",
+               resource_type: str = "") -> None:
+    if isinstance(node, dict):
+        rt = str(node.get("resourceType", resource_type)).casefold()
+        for key, child in node.items():
+            key_s = str(key)
+            child_path = path + (key_s,)
+            context = (parent + " " + key_s).strip()
+            kind = _key_kind(key_s, parent)
+            if kind is None and isinstance(child, str) and parse_date(child):
+                # Strict full-date parsing also catches date values stored in
+                # loosely named metadata keys without matching arbitrary text.
+                kind = "event_date"
+            if rt == "encounter" and key_s.casefold() == "period":
+                context += " encounterperiod"
+            if rt == "condition" and key_s.casefold() == "code":
+                context += " conditioncode"
+            if kind:
+                if isinstance(child, (str, int, float)):
+                    record.add(kind, child, key_s, child_path)
+                elif isinstance(child, (dict, list)) and kind in {"address", "stay"}:
+                    _walk_json(record, child, child_path, context, rt)
+                    continue
+            if isinstance(child, (dict, list)):
+                _walk_json(record, child, child_path, context, rt)
+    elif isinstance(node, list):
+        for index, child in enumerate(node):
+            _walk_json(record, child, path + (index,), parent, resource_type)
