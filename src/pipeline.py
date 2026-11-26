@@ -712,6 +712,7 @@ def main(argv: list[str] | None = None) -> int:
     if not secret:
         print("error: RAKSHA_SECRET is required", file=sys.stderr)
         return 2
+    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(message)s")
     try:
         policy = load_policy(DEFAULT_POLICY)
         report = run_pipeline(Path(args.input), Path(args.output), secret, policy)
