@@ -21,7 +21,7 @@ _EVENT_DATE_KEYS = {
 }
 _AGE_KEY = re.compile(r"^(?:age|patientage|age_sex|ageyears|umar|वय|आयु|उम्र)$", re.I)
 _DATE_VALUE = re.compile(
-    r"(?<!\d)(?:\d{4}-\d{1,2}-\d{1,2}(?:[T ][0-9:.+-]+Z?)?|\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})(?!\d)"
+    r"(?<![\w/])(?:\d{4}-\d{1,2}-\d{1,2}(?:[T ][0-9:.+-]+Z?)?|\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})(?![\w/])"
 )
 
 
@@ -149,7 +149,7 @@ def _walk_json(record: PrivacyRecord, node: Any, path: tuple[str | int, ...] = (
 def _text_fields(record: PrivacyRecord, text: str) -> None:
     label_patterns = {
         "dob": r"(?:date\s+of\s+birth|dob|birth\s+date|जन्म\s*तिथि|जन्म\s*दिनांक)",
-        "event_date": r"(?:date\s+of\s+(?:admission|discharge)|admission\s+date|discharge\s+date|visit\s+date|encounter\s+date|reg\s+date|visit|admission|discharge|date(?!\s+of\s+birth)|दिनांक|तारीख)",
+        "event_date": r"(?:date\s+of\s+(?:admission|discharge)|admission\s+date|discharge\s+date|visit\s+date|encounter\s+date|reg\s+date|date(?!\s+of\s+birth)|दिनांक|तारीख)",
         "age": r"(?:patient\s+age|age|umar|आयु|उम्र|वय)",
         "locality": r"(?:village|gaon|gram|mohalla|locality|ward|गांव|गाँव|ग्राम)",
         "tehsil": r"(?:tehsil|taluka|तहसील)",
@@ -168,7 +168,8 @@ def _text_fields(record: PrivacyRecord, text: str) -> None:
             left = start + (len(match.group(1)) - len(match.group(1).lstrip()))
             right = left + len(raw)
             if kind in {"event_date", "dob"}:
-                date_match = _DATE_VALUE.search(raw)
+                date_match = next((candidate for candidate in _DATE_VALUE.finditer(raw)
+                                   if parse_date(candidate.group())), None)
                 if not date_match:
                     continue
                 left += date_match.start()
