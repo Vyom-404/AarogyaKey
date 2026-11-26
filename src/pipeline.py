@@ -698,7 +698,8 @@ def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | 
         "timing": {"seconds": round(time.monotonic() - started, 2)},
         "resources": {"peak_rss_mb": peak_rss_mb()},
     }
-    (output_dir / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    _private_write(output_dir / "report.json", json.dumps(report, indent=2) + "\n")
+    _validate_output_tree(output_dir, secret)
     return report
 
 
