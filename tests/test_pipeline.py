@@ -93,3 +93,30 @@ class PipelineTests(unittest.TestCase):
         notes = json.loads((self.out / "sanitized/visit.json").read_text(encoding="utf-8"))["visits"][0]["notes"]
         self.assertNotIn("Asha", notes)
         self.assertIn("BP 120/80", notes)
+
+    def test_nested_address_metadata_and_fhir_extension_are_sanitized(self) -> None:
+        data = {
+            "resourceType": "Patient",
+            "address": [{"line": ["House 9, Lake Road"], "city": "Example City", "postalCode": "226021"}],
+            "meta": {"source_path": "imports/Example Patient.json", "raised_by": {"name": "Rohan Das"}},
+            "extension": [{"url": "relative-name", "valueString": "Meera Das"}],
+        }
+        (self.inp / "patient.json").write_text(json.dumps(data), encoding="utf-8")
+        self.run_it()
+        result = json.loads((self.out / "sanitized/patient.json").read_text(encoding="utf-8"))
+        self.assertEqual(result["address"][0]["line"][0], "[ADDRESS]")
+        self.assertEqual(result["address"][0]["city"], "[ADDRESS]")
+        self.assertEqual(result["address"][0]["postalCode"], "[PIN]")
+        self.assertEqual(result["meta"]["source_path"], "[METADATA]")
+        self.assertEqual(result["meta"]["raised_by"]["name"], "[PATIENT_NAME]")
+
+    def test_fhir_identifier_in_encounter_is_redacted(self) -> None:
+        data = {"resourceType": "Bundle", "type": "collection", "entry": [
+            {"resource": {"resourceType": "Encounter", "identifier": [{"value": "ADM000161"}],
+                          "diagnosis": [{"display": "Hypertension"}]}}
+        ]}
+        (self.inp / "fhir.json").write_text(json.dumps(data), encoding="utf-8")
+        self.run_it()
+        result = json.loads((self.out / "sanitized/fhir.json").read_text(encoding="utf-8"))
+        self.assertEqual(result["entry"][0]["resource"]["identifier"][0]["value"], "[MRN]")
+        self.assertEqual(result["entry"][0]["resource"]["diagnosis"][0]["display"], "Hypertension")
