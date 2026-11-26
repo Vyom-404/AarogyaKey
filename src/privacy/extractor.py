@@ -13,6 +13,7 @@ from typing import Any
 
 from src.linkage.extractor import decode_input
 from src.privacy.date_shifter import parse_date
+from src.security.filesystem import read_regular_file
 
 SUPPORTED = {".csv", ".tsv", ".json", ".txt"}
 _EVENT_DATE_KEYS = {
@@ -208,7 +209,7 @@ def collect_privacy_records(input_dir: Path, max_bytes: int = 50 * 1024 * 1024) 
                 if path.stat().st_size > max_bytes:
                     continue
                 rel = path.relative_to(input_dir).as_posix()
-                text = decode_input(path.read_bytes())
+                text = decode_input(read_regular_file(path, max_bytes))
                 suffix = path.suffix.lower()
                 if suffix in {".csv", ".tsv"}:
                     rows = list(csv.reader(text.splitlines(), delimiter="\t" if suffix == ".tsv" else ",", strict=True))
