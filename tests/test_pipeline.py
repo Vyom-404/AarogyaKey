@@ -120,3 +120,19 @@ class PipelineTests(unittest.TestCase):
         result = json.loads((self.out / "sanitized/fhir.json").read_text(encoding="utf-8"))
         self.assertEqual(result["entry"][0]["resource"]["identifier"][0]["value"], "[MRN]")
         self.assertEqual(result["entry"][0]["resource"]["diagnosis"][0]["display"], "Hypertension")
+
+    def test_utf16_tsv_is_written_as_utf8(self) -> None:
+        (self.inp / "rows.tsv").write_bytes("field\tvalue\nα\tclinical\n".encode("utf-16"))
+        self.run_it()
+        raw_output = (self.out / "sanitized/rows.tsv").read_bytes()
+        self.assertEqual(raw_output.decode("utf-8"), "field\tvalue\nα\tclinical\n")
+
+    def test_demographic_city_with_village_form_is_redacted_conservatively(self) -> None:
+        (self.inp / "registration").mkdir()
+        (self.inp / "registration" / "patients.csv").write_text("City,District\nExampledih,Hardoi\n", encoding="utf-8")
+        (self.inp / "lab.csv").write_text("City,Result\nExample City,Normal\n", encoding="utf-8")
+        self.run_it()
+        registration = (self.out / "sanitized/registration/patients.csv").read_text(encoding="utf-8")
+        lab = (self.out / "sanitized/lab.csv").read_text(encoding="utf-8")
+        self.assertIn("[VILLAGE],Hardoi", registration)
+        self.assertIn("Example City,Normal", lab)
