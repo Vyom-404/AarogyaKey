@@ -153,3 +153,19 @@ class PipelineTests(unittest.TestCase):
         nested = self.inp / "generated"
         with self.assertRaisesRegex(ValueError, "outside_input"):
             run_pipeline(self.inp, nested, "unit-test-secret")
+
+    def test_symlink_is_reported_without_following_target(self) -> None:
+        target = self.root / "sensitive.txt"
+        target.write_text("target content", encoding="utf-8")
+        (self.inp / "linked.txt").symlink_to(target)
+        report = self.run_it()
+        self.assertEqual(report["files"][0]["status"], "quarantined")
+        self.assertEqual(report["files"][0]["reason"], "symlink_input")
+        self.assertFalse((self.out / "sanitized/linked.txt").exists())
+
+    def test_input_is_not_modified(self) -> None:
+        source = self.inp / "note.txt"
+        source.write_text("clinical note", encoding="utf-8")
+        before = source.read_bytes()
+        self.run_it()
+        self.assertEqual(source.read_bytes(), before)
