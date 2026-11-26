@@ -7,12 +7,16 @@ import csv
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import resource
+import secrets as secure_random
+import stat
 import sys
 import time
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any
 
 from src.config import load_policy
@@ -23,10 +27,13 @@ from src.linkage.extractor import extract_records
 from src.linkage.models import RecordIdentity
 from src.privacy import build_privacy_actions, collect_privacy_records, equivalence_summary
 from src.privacy.extractor import PrivacyAction, PrivacyRecord
+from src.security.filesystem import hash_regular_file, read_regular_file
+from src.security.safe_logging import log_event
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_POLICY = ROOT / "config" / "policy.yaml"
 SUPPORTED = {".csv", ".tsv", ".json", ".txt"}
+LOGGER = logging.getLogger("raksha.security")
 
 
 class UnsafeInput(ValueError):
@@ -153,7 +160,7 @@ def harvest_input_names(input_dir: Path, max_bytes: int, max_json_depth: int) ->
         try:
             if path.stat().st_size > max_bytes:
                 continue
-            text = decode_bytes(path.read_bytes())
+            text = decode_bytes(read_regular_file(path, max_bytes))
             if path.suffix.lower() in {".csv", ".tsv"}:
                 delimiter = "\t" if path.suffix.lower() == ".tsv" else ","
                 rows = list(csv.reader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True))
@@ -279,6 +286,7 @@ def transform_file(
     identity_records: list[RecordIdentity] | None = None,
     pseudonyms: dict[tuple[str, str], str] | None = None,
     privacy_actions: dict[tuple[str, str], list[PrivacyAction]] | None = None,
+    raw_data: bytes | None = None,
 ) -> tuple[str, list[dict[str, Any]], int, list[Detection], list[PrivacyAction]]:
     """Decode and serialize a supported file; return text, locators, record count."""
     if path.is_symlink():
@@ -295,7 +303,10 @@ def transform_file(
     privacy_actions = privacy_actions or {}
     identities = {record.loc: record for record in identity_records}
     applied_actions: list[PrivacyAction] = []
-    raw = path.read_bytes()
+    try:
+        raw = raw_data if raw_data is not None else read_regular_file(path, max_bytes)
+    except ValueError as exc:
+        raise UnsafeInput(str(exc)) from None
     if not raw.strip():
         raise UnsafeInput("empty_file")
     suffix = path.suffix.lower()
