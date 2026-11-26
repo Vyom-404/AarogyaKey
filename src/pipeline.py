@@ -469,24 +469,122 @@ def _overlay_markers(text: str, actions: list[PrivacyAction]) -> str:
     return text
 
 
-def _report_entry(path: Path, raw: bytes | None, status: str, output: str | None, reason: str | None = None) -> dict:
+def _report_entry(path: Path, raw: bytes | None, status: str, output: str | None,
+                  reason: str | None = None, digest: str | None = None) -> dict:
     # A read failure still receives an explicit report entry. Empty-byte hash is
     # a sentinel because the input bytes could not be read for hashing.
-    digest = hashlib.sha256(raw if raw is not None else b"").hexdigest()
+    digest = digest or hashlib.sha256(raw if raw is not None else b"").hexdigest()
     entry = {"input_sha256": digest, "output": output, "status": status}
     if reason:
         entry["reason"] = reason
     return entry
 
 
+def _private_directory(path: Path) -> None:
+    absolute = path.absolute()
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current = current / part
+        try:
+            info = current.lstat()
+        except FileNotFoundError:
+            try:
+                current.mkdir(mode=0o700)
+            except OSError:
+                raise OSError("private_directory_unavailable") from None
+            info = current.lstat()
+        except OSError:
+            raise OSError("private_directory_unavailable") from None
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+            raise OSError("private_directory_unavailable") from None
+    os.chmod(path, 0o700)
+
+
+def _safe_output_path(root: Path, relative: str) -> Path:
+    candidate = PurePosixPath(relative)
+    if candidate.is_absolute() or not candidate.parts or ".." in candidate.parts:
+        raise UnsafeInput("unsafe_output_path")
+    return root.joinpath(*candidate.parts)
+
+
+def _private_write(path: Path, text: str) -> None:
+    """Write through a private sibling and atomically publish, cleaning on error."""
+    _private_directory(path.parent)
+    temporary = path.with_name("." + path.name + "." + secure_random.token_hex(8) + ".tmp")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = -1
+    try:
+        descriptor = os.open(temporary, flags, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as stream:
+            descriptor = -1
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    except BaseException:
+        if descriptor >= 0:
+            os.close(descriptor)
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def _validate_output_tree(output_dir: Path, secret: str) -> None:
+    """Reject symlinks and raw-secret artifacts before returning success."""
+    secret_bytes = secret.encode("utf-8")
+    if stat.S_IMODE(output_dir.lstat().st_mode) & 0o077:
+        raise OSError("output_permissions_unsafe") from None
+    for current, dirs, names in os.walk(output_dir, followlinks=False):
+        base = Path(current)
+        for name in list(dirs) + names:
+            artifact = base / name
+            try:
+                info = artifact.lstat()
+            except OSError:
+                raise OSError("output_scan_failed") from None
+            if stat.S_ISLNK(info.st_mode):
+                raise OSError("output_symlink_detected") from None
+            if secret and secret in name:
+                raise OSError("output_secret_detected") from None
+            if stat.S_ISDIR(info.st_mode) and stat.S_IMODE(info.st_mode) & 0o077:
+                raise OSError("output_permissions_unsafe") from None
+        dirs[:] = sorted(dirs)
+        for name in sorted(names):
+            artifact = base / name
+            if not stat.S_ISREG(artifact.lstat().st_mode):
+                raise OSError("output_unsafe_artifact") from None
+            if name.endswith(".tmp") or stat.S_IMODE(artifact.lstat().st_mode) & 0o077:
+                raise OSError("output_artifact_unsafe") from None
+            with artifact.open("rb") as stream:
+                overlap = b""
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    scan = overlap + chunk
+                    if secret_bytes and secret_bytes in scan:
+                        raise OSError("output_secret_detected") from None
+                    overlap = scan[-max(0, len(secret_bytes) - 1):] if secret_bytes else b""
+
+
 def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | None = None) -> dict:
-    if not secret:
-        raise ValueError("RAKSHA_SECRET is required")
+    from src.security.secret_manager import validate_secret
+
+    validate_secret(secret)
+    if input_dir.is_symlink():
+        raise ValueError("input_path_unsafe") from None
     input_dir = input_dir.resolve(strict=True)
     if not input_dir.is_dir():
         raise ValueError("input_path_must_be_directory")
-    output_dir = output_dir.resolve()
-    if output_dir == input_dir or input_dir in output_dir.parents:
+    requested_output = output_dir.expanduser().absolute()
+    if requested_output.is_symlink():
+        raise ValueError("output_path_unsafe") from None
+    output_dir = requested_output.resolve()
+    if output_dir == input_dir or input_dir in output_dir.parents or output_dir in input_dir.parents:
         raise ValueError("output_must_be_outside_input")
     if output_dir.exists() and any(output_dir.iterdir()):
         raise ValueError("output_directory_must_be_empty")
@@ -515,28 +613,44 @@ def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | 
     generalized_records: set[tuple[str, str]] = set()
     suppressed_records: set[tuple[str, str]] = set()
     privacy_action_counts: dict[str, int] = {}
+    _private_directory(output_dir)
     sanitized_dir = output_dir / "sanitized"
-    sanitized_dir.mkdir(parents=True, exist_ok=True)
+    _private_directory(sanitized_dir)
 
     for path in discover(input_dir):
         rel = path.relative_to(input_dir).as_posix()
         raw: bytes | None = None
+        reported_digest: str | None = None
         try:
             if path.is_symlink():
                 raw = os.readlink(path).encode("utf-8", errors="replace")
+                try:
+                    target = path.resolve(strict=True)
+                    if target.is_file():
+                        # Hash only for organizer accounting; never parse or export the referent.
+                        reported_digest = hash_regular_file(target)
+                except (OSError, ValueError):
+                    reported_digest = None
                 raise UnsafeInput("symlink_input")
-            raw = path.read_bytes()
+            try:
+                raw = read_regular_file(path, max_bytes)
+            except ValueError as exc:
+                if path.is_symlink():
+                    raw = os.readlink(path).encode("utf-8", errors="replace")
+                    raise UnsafeInput("symlink_input") from None
+                raise UnsafeInput(str(exc)) from None
             content_hash = hashlib.sha256(raw).hexdigest()
             output_rel = sanitized_relative_path(rel, content_hash, detector)
             result, file_records, _, hits, applied_actions = transform_file(
                 path, output_rel, max_bytes, max_depth, detector,
                 identities_by_file.get(rel, []), linkage.pseudonyms,
                 privacy_actions_by_file.get(rel, {}),
+                raw,
             )
-            destination = sanitized_dir / output_rel
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text(result, encoding="utf-8", newline="")
+            destination = _safe_output_path(sanitized_dir, output_rel)
+            _private_write(destination, result)
             files_report.append(_report_entry(path, raw, "sanitized", f"sanitized/{output_rel}"))
+            log_event(LOGGER, "file_processed", file_sha256=content_hash, status="sanitized")
             records.extend(file_records)
             for action in applied_actions:
                 ref = (action.file, action.loc)
