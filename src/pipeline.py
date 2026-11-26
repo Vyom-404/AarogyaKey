@@ -663,13 +663,19 @@ def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | 
                 entity_counts[hit.category] = entity_counts.get(hit.category, 0) + 1
         except (OSError, UnsafeInput, UnicodeError, RecursionError, csv.Error, ValueError) as exc:
             reason = str(exc) if isinstance(exc, UnsafeInput) else "read_or_processing_error"
-            files_report.append(_report_entry(path, raw, "quarantined", None, reason))
+            digest = reported_digest or (hashlib.sha256(raw).hexdigest() if raw is not None else None)
+            if digest is None and not path.is_symlink():
+                try:
+                    digest = hash_regular_file(path)
+                except (OSError, ValueError):
+                    digest = None
+            files_report.append(_report_entry(path, raw, "quarantined", None, reason, digest))
+            log_event(LOGGER, "file_processed", file_sha256=digest or hashlib.sha256(b"").hexdigest(),
+                      status="quarantined", reason=reason)
 
     records.sort(key=lambda item: (item["file"], item["loc"]))
-    (output_dir / "records.jsonl").write_text(
-        "".join(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n" for record in records),
-        encoding="utf-8",
-    )
+    _private_write(output_dir / "records.jsonl",
+                   "".join(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n" for record in records))
     sanitized_count = sum(entry["status"] == "sanitized" for entry in files_report)
     privacy_after_records = collect_privacy_records(sanitized_dir, max_bytes)
     risk_summary = equivalence_summary(privacy_records, privacy_after_records, rules)
