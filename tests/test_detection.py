@@ -134,3 +134,21 @@ class DetectionTests(unittest.TestCase):
             with self.subTest(sample="hinglish-patient-role"):
                 self.assertIn("PATIENT_NAME", self.categories(sample))
         self.assertEqual(self.detector.sanitize("Dr. Ramesh ka BP 120/80")[0], "Dr. Ramesh ka BP 120/80")
+
+    def test_hindi_names_relationships_and_hinglish(self) -> None:
+        examples = ["नाम: आरव शर्मा", "रोगी का नाम: नीलम वर्मा", "पति मोहन लाल", "Sahab ko Bukhar"]
+        for value in examples[:3]:
+            with self.subTest(value=value):
+                result, _ = self.detector.sanitize(value)
+                self.assertIn("[", result)
+        self.assertEqual(self.detector.sanitize(examples[3])[0], examples[3])
+
+    def test_name_lexicon_finds_new_name_and_transliteration(self) -> None:
+        self.detector.add_name("आरव शर्मा")
+        latin_result, latin_hits = self.detector.sanitize("Patient seen: Aarav Sharma")
+        hindi_result, hindi_hits = self.detector.sanitize("रोगी आरव शर्मा को देखा")
+        ambiguous_result, _ = self.detector.sanitize("आज आरव शर्मा आए")
+        self.assertIn("[PATIENT_NAME]", latin_result)
+        self.assertIn("[PATIENT_NAME]", hindi_result)
+        self.assertEqual(ambiguous_result, "आज आरव शर्मा आए")
+        self.assertTrue(any(hit.method in {"identity_label", "contextual_name_lexicon"} for hit in latin_hits + hindi_hits))
