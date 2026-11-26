@@ -185,3 +185,22 @@ class DetectionTests(unittest.TestCase):
                 cleaned, hits = self.detector.sanitize(sentence)
                 self.assertTrue(any(hit.category == "RELATIVE_NAME" for hit in hits))
                 self.assertNotEqual(cleaned, sentence)
+
+    def test_doctors_and_clinical_values_are_protected(self) -> None:
+        self.detector.add_name("Ramesh Kumar")
+        samples = [
+            "Dr. Ramesh Kumar prescribed Ramipril 5 mg",
+            "Dolo 650 BD x 5 days",
+            "Dose 1-0-1",
+            "BP 120/80 mmHg; HbA1c 7.2%",
+            "Diagnosis: Parkinson's disease",
+            "Dengue with temperature 102°F",
+        ]
+        for sample in samples:
+            with self.subTest(sample=sample):
+                self.assertEqual(self.detector.sanitize(sample)[0], sample)
+        self.assertEqual(self.detector.sanitize("Dr. Ramesh Kumar", "doctor_name")[0], "Dr. Ramesh Kumar")
+
+    def test_medical_spans_are_not_reported_as_person_detections(self) -> None:
+        self.detector.add_name("Fever Patient")
+        self.assertEqual(self.categories("Complaint: fever; dose 5 mg"), set())
