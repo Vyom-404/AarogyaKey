@@ -41,3 +41,32 @@ class PipelineTests(unittest.TestCase):
         records = [json.loads(line) for line in (self.out / "records.jsonl").read_text().splitlines()]
         self.assertIn({"file": "sanitized/visits.json", "loc": "/visits/1", "patient": None}, records)
         self.assertIn({"file": "sanitized/bundle.json", "loc": "doc", "patient": None}, records)
+
+    def test_fhir_patient_name_is_removed_but_clinical_names_remain(self) -> None:
+        bundle = {
+            "resourceType": "Bundle", "type": "collection", "entry": [
+                {"resource": {"resourceType": "Organization", "name": "Example Medical Center"}},
+                {"resource": {"resourceType": "Patient", "name": [{"given": ["Aarav"], "family": "Kulkarni"}]}},
+                {"resource": {"resourceType": "Condition", "code": {"text": "Parkinson's disease"}}},
+            ],
+        }
+        (self.inp / "bundle.json").write_text(json.dumps(bundle), encoding="utf-8")
+        self.run_it()
+        result = json.loads((self.out / "sanitized/bundle.json").read_text(encoding="utf-8"))
+        self.assertEqual(result["entry"][0]["resource"]["name"], "Example Medical Center")
+        self.assertEqual(result["entry"][1]["resource"]["name"][0]["given"][0], "[PATIENT_NAME]")
+        self.assertEqual(result["entry"][1]["resource"]["name"][0]["family"], "[PATIENT_NAME]")
+        self.assertEqual(result["entry"][2]["resource"]["code"]["text"], "Parkinson's disease")
+
+    def test_nested_diagnosis_terms_are_not_matched_as_patient_names(self) -> None:
+        data = {
+            "visits": [{
+                "patient_name": "Aarav Kulkarni",
+                "diagnosis": {"coding": [{"display": "Parkinson's disease"}]},
+            }]
+        }
+        (self.inp / "visits.json").write_text(json.dumps(data), encoding="utf-8")
+        self.run_it()
+        result = json.loads((self.out / "sanitized/visits.json").read_text(encoding="utf-8"))
+        self.assertEqual(result["visits"][0]["patient_name"], "[PATIENT_NAME]")
+        self.assertEqual(result["visits"][0]["diagnosis"]["coding"][0]["display"], "Parkinson's disease")
