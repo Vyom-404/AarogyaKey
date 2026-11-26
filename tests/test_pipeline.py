@@ -70,3 +70,26 @@ class PipelineTests(unittest.TestCase):
         result = json.loads((self.out / "sanitized/visits.json").read_text(encoding="utf-8"))
         self.assertEqual(result["visits"][0]["patient_name"], "[PATIENT_NAME]")
         self.assertEqual(result["visits"][0]["diagnosis"]["coding"][0]["display"], "Parkinson's disease")
+
+    def test_record_local_patient_name_is_removed_from_notes_only_in_same_record(self) -> None:
+        data = {
+            "visits": [
+                {"patient": {"name": "Aarav Kulkarni"}, "notes": "Seen with Aarav Kulkarni; dengue improving."},
+                {"patient": {"name": "Nisha Patel"}, "notes": "Dr. Aarav Kulkarni reviewed HbA1c 7.2%."},
+            ]
+        }
+        (self.inp / "visits.json").write_text(json.dumps(data), encoding="utf-8")
+        self.run_it()
+        result = json.loads((self.out / "sanitized/visits.json").read_text(encoding="utf-8"))
+        self.assertNotIn("Aarav Kulkarni", result["visits"][0]["notes"])
+        self.assertIn("Dr. Aarav Kulkarni", result["visits"][1]["notes"])
+        self.assertEqual(result["visits"][1]["patient"]["name"], "[PATIENT_NAME]")
+
+    def test_patient_first_name_in_local_kinship_reference_is_removed(self) -> None:
+        data = {"visits": [{"patient": {"name": "Asha Rajput"},
+                            "notes": "Asha's attendant called. Asha didi ka BP 120/80."}]}
+        (self.inp / "visit.json").write_text(json.dumps(data), encoding="utf-8")
+        self.run_it()
+        notes = json.loads((self.out / "sanitized/visit.json").read_text(encoding="utf-8"))["visits"][0]["notes"]
+        self.assertNotIn("Asha", notes)
+        self.assertIn("BP 120/80", notes)
