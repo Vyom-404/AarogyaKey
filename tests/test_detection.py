@@ -152,3 +152,36 @@ class DetectionTests(unittest.TestCase):
         self.assertIn("[PATIENT_NAME]", hindi_result)
         self.assertEqual(ambiguous_result, "आज आरव शर्मा आए")
         self.assertTrue(any(hit.method in {"identity_label", "contextual_name_lexicon"} for hit in latin_hits + hindi_hits))
+
+    def test_known_name_is_not_redacted_without_identity_context(self) -> None:
+        self.detector.add_name("Aarav Sharma", trusted=True)
+        for clinical in (
+            "History: Aarav Sharma pattern noted; continue observation.",
+            "Dr. Aarav Sharma prescribed Dolo 650 BD x 5 days.",
+        ):
+            with self.subTest(context="clinical"):
+                self.assertEqual(self.detector.sanitize(clinical)[0], clinical)
+        self.detector.add_name("Hodgkin", trusted=True)
+        self.assertEqual(self.detector.sanitize("Hodgkin lymphoma confirmed; start treatment.")[0],
+                         "Hodgkin lymphoma confirmed; start treatment.")
+        self.detector.add_name("Asha Rajput", trusted=True)
+        self.assertEqual(self.detector.sanitize("Referred by ASHA worker; refer to ASHA workers.")[0],
+                         "Referred by ASHA worker; refer to ASHA workers.")
+        self.assertEqual(self.detector.sanitize("Aarav Sharma described the clinical course.")[0],
+                         "Aarav Sharma described the clinical course.")
+        self.assertIn("[PATIENT_NAME]", self.detector.sanitize("Patient Aarav Sharma described the clinical course.")[0])
+        identified, hits = self.detector.sanitize("Patient: Aarav Sharma; diagnosis: Dengue")
+        self.assertIn("[PATIENT_NAME]", identified)
+        self.assertTrue(any(hit.method == "identity_label" for hit in hits))
+
+    def test_role_anchored_names_in_notes_and_attachments(self) -> None:
+        for sentence in (
+            "18:40 - Nisha Verma (attendant, bed 12)",
+            "AMB-204 | caller: Rohan Lal | called by Meera Shah",
+            "Consent witnessed by Anil Rao, phone 9000000000",
+            "साथ आए अभिभावक: सीमा देवी",
+        ):
+            with self.subTest(context="person-role"):
+                cleaned, hits = self.detector.sanitize(sentence)
+                self.assertTrue(any(hit.category == "RELATIVE_NAME" for hit in hits))
+                self.assertNotEqual(cleaned, sentence)
