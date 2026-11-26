@@ -1,0 +1,58 @@
+from __future__ import annotations
+
+import unittest
+import base64
+
+from src.detection import PIIDetector
+from src.detection.detector import field_category
+from src.detection.normalization import name_keys, normalize_text, transliterate_devanagari
+
+
+
+class NormalizationTests(unittest.TestCase):
+
+    def test_unicode_and_hindi_digits_normalize(self) -> None:
+        self.assertEqual(normalize_text("  ＡＢＣ   १२३ "), "abc 123")
+
+    def test_common_devanagari_name_transliteration(self) -> None:
+        key = " ".join(sorted(name_keys("आरव शर्मा")))
+        self.assertIn("aarav sharma", key)
+        self.assertIn("arav sharma", key)
+        self.assertTrue(transliterate_devanagari("राहुल").startswith("raahul"))
+
+
+class DetectionTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.detector = PIIDetector()
+
+    def categories(self, text: str, field: str = "") -> set[str]:
+        return {hit.category for hit in self.detector.find(text, field)}
+
+    def test_indian_direct_identifiers_and_variants(self) -> None:
+        cases = [
+            ("Call +91 98765-43210", "PHONE"),
+            ("Aadhaar: 2345 6789 0123", "AADHAAR"),
+            ("ABHA ID: 12-3456-7890-1234", "ABHA_NUMBER"),
+            ("UHID: HSP-26-001245", "MRN"),
+            ("PAN: ABCDE1234F", "PAN"),
+            ("Email: unseen.person@example.test", "EMAIL"),
+        ]
+        for sample, expected in cases:
+            with self.subTest(category=expected):
+                self.assertIn(expected, self.categories(sample))
+
+    def test_structured_fields_are_detected(self) -> None:
+        values = [
+            ("Aarav Kulkarni", "Patient Name", "PATIENT_NAME"),
+            ("9876543210", "mobile_no", "PHONE"),
+            ("Plot 12, Lake Road", "residential_address", "ADDRESS"),
+            ("226021", "postal_code", "PIN"),
+            ("Kavita Verma", "guardian_name", "RELATIVE_NAME"),
+        ]
+        for value, field, expected in values:
+            with self.subTest(field=field):
+                result, hits = self.detector.sanitize(value, field)
+                self.assertEqual(result, f"[{expected}]")
+                self.assertEqual(hits[0].method, "structured_field")
+                self.assertGreaterEqual(hits[0].confidence, 0.9)
