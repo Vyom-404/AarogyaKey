@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import datetime as dt
-import hashlib
 import hmac
 import re
 from dataclasses import dataclass
+
+from src.security.secret_manager import derive_key
 
 
 @dataclass(frozen=True, repr=False)
@@ -41,17 +42,15 @@ class DateShifter:
     DOMAIN = b"secret-wards/date-shift/v1\0"
 
     def __init__(self, secret: str, maximum_days: int = 365) -> None:
-        if not isinstance(secret, str) or not secret.strip() or len(secret.encode("utf-8")) < 16:
-            raise ValueError("RAKSHA_SECRET is invalid")
         if not isinstance(maximum_days, int) or maximum_days < 1 or maximum_days > 3650:
             raise ValueError("date_shift_max_days is invalid")
-        self._key = secret.encode("utf-8")
+        self._key = derive_key(secret, "date-shift/v2")
         self.maximum_days = maximum_days
 
     def offset_days(self, patient_pseudonym: str) -> int:
         if not patient_pseudonym or not patient_pseudonym.startswith("PSN-"):
             raise ValueError("patient_identity_unresolved")
-        digest = hmac.new(self._key, self.DOMAIN + patient_pseudonym.encode("utf-8"), hashlib.sha256).digest()
+        digest = hmac.new(self._key, self.DOMAIN + patient_pseudonym.encode("utf-8"), "sha256").digest()
         width = self.maximum_days * 2
         offset = int.from_bytes(digest[:8], "big") % width - self.maximum_days
         return offset if offset else 1
