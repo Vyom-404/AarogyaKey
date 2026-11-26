@@ -63,7 +63,7 @@ _NAME_HONORIFIC_SUFFIX = re.compile(r"(?i)([A-Z\u0900-\u097f][A-Z\u0900-\u097f.'
 _NAME_AGE = re.compile(r"(?i)([A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*(?:\s+[A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*){0,2})\s+\d{1,3}\s*(?:y|yr|yrs|year|years)?\s*[/,-]\s*[mf]\b")
 _NAME_LABEL_REPORT_OF = re.compile(r"(?i)\breport\s+of\s+([A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*(?:\s+[A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*){0,2})(?=\s+(?:age\s*)?\d|[,;:]|$)")
 _NAME_BEFORE_RELATION = re.compile(r"(?i)([A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*(?:\s+[A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*){0,2})\s*,?\s+(?:s\s*/\s*o|d\s*/\s*o|w\s*/\s*o|son\s+of|daughter\s+of|wife\s+of|husband\s+of|के\s+पुत्र|की\s+पत्नी)\b")
-_HINDI_PATIENT_OBJECT = re.compile(r"(?i)([A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*(?:\s+[A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*){0,2})\s+को\s+(?:(?:\d+\s*(?:दिन|हफ्ते|सप्ताह|महीने)\s*(?:से|के))|(?:बुखार|दर्द|खांसी|उल्टी|दिखाया|भर्ती|इलाज))")
+_HINDI_PATIENT_OBJECT = re.compile(r"(?i)([A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*(?:[ \t]+[A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*){0,2})[ \t]+को[ \t]+(?:(?:आज|कल|पिछले[ \t]+दिन|अभी)[ \t]+)?(?:(?:\d+[ \t]*(?:दिन|हफ्ते|सप्ताह|महीने)[ \t]*(?:से|के))|(?:बुखार|दर्द|खांसी|उल्टी|दिखाया|भर्ती|इलाज|जाँचा[ \t]+गया|जांचा[ \t]+गया|जांच[ \t]+की|जांच[ \t]+के[ \t]+लिए|परीक्षण[ \t]+किया))")
 _HINGLISH_PATIENT_NOTE = re.compile(r"(?i)([A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*(?:\s+[A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*){0,2})(?:\s+(?:ji|sahab|babu|bhai|didi|behenji|amma|भैया|बहनजी))?\s+(?:ka|ki|ke)\s+(?:bp|pulse|bukhar|dard|khansi|sugar|ulti)\b")
 _NAME_BEFORE_KNOWN_HISTORY = re.compile(r"(?i)([A-Z][A-Z.'’\-]*(?:\s+[A-Z][A-Z.'’\-]*){1,2})\s*[-–]\s*k\s*/\s*c\s*/\s*o\b")
 _KINSHIP_SUFFIX = re.compile(r"(?i)([A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*(?:\s+[A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*){0,2}\s+(?:bhaiya|bhai|behenji|behen|didi|chachu|chacha|mama|mami|mausa|mausi|papa|pitaji|amma|nana|nani|dada|dadi|kaka|kaki|भैया|भाई|बहनजी|बहन|चाचा|चाचू|मामा|मामी|पापा|अम्मा|नाना|नानी|दादा|दादी))\b")
@@ -184,6 +184,10 @@ class PIIDetector:
                 end_index = index + len(phrase)
                 if end_index <= len(tokens) and tuple(item[0] for item in tokens[index:end_index]) == phrase:
                     end = tokens[end_index - 1][2]
+                    # K/C/O is the clinical abbreviation "known case of";
+                    # C/O itself is a relationship/complaint marker, not a name.
+                    if re.fullmatch(r"(?i)(?:k\s*/\s*c(?:\s*/\s*o)?|c\s*/\s*o)", text[start:end]):
+                        continue
                     if category in {"PATIENT_NAME", "RELATIVE_NAME"}:
                         # A learned identity is evidence only when the occurrence
                         # itself is near an explicit person/relationship cue.
