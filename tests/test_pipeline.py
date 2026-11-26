@@ -136,3 +136,20 @@ class PipelineTests(unittest.TestCase):
         lab = (self.out / "sanitized/lab.csv").read_text(encoding="utf-8")
         self.assertIn("[VILLAGE],Hardoi", registration)
         self.assertIn("Example City,Normal", lab)
+
+    def test_malformed_and_unsupported_files_are_accounted_for(self) -> None:
+        (self.inp / "broken.json").write_text("{", encoding="utf-8")
+        (self.inp / "binary.pdf").write_bytes(b"%PDF-not-parsed")
+        report = self.run_it()
+        entries = {item["status"]: item for item in report["files"]}
+        self.assertEqual(report["counts"]["files_total"], 2)
+        self.assertEqual(report["counts"]["files_quarantined"], 2)
+        self.assertEqual(entries["quarantined"]["output"], None)
+        self.assertFalse((self.out / "sanitized/binary.pdf").exists())
+
+    def test_empty_secret_and_nested_output_fail_closed(self) -> None:
+        with self.assertRaisesRegex(ValueError, "RAKSHA_SECRET"):
+            run_pipeline(self.inp, self.out, "")
+        nested = self.inp / "generated"
+        with self.assertRaisesRegex(ValueError, "outside_input"):
+            run_pipeline(self.inp, nested, "unit-test-secret")
