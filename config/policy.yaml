@@ -1,0 +1,3 @@
+# Phase 1 safety limits. Detection and privacy policy are added in later phases.
+max_file_bytes: 52428800
+max_json_depth: 100
