@@ -1,3 +1,6 @@
 # Input safety limits for deterministic ingestion and privacy transformation.
 max_file_bytes: 52428800
 max_json_depth: 100
+date_shift_max_days: 365
+age_band_years: 5
+senior_age_from: 85
