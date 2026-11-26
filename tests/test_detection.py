@@ -115,3 +115,22 @@ class DetectionTests(unittest.TestCase):
         self.assertEqual(self.detector.sanitize_header_or_key("Anaya Qureshi")[0], "[PATIENT_NAME]")
         self.assertEqual(self.detector.sanitize_header_or_key("source_path")[0], "source_path")
         self.assertEqual(self.detector.sanitize_header_or_key("JJH-0077112 Zainab")[0], "[MRN] [PATIENT_NAME]")
+
+    def test_unlabelled_compact_mrn_shape_is_detected(self) -> None:
+        for value in ("ADM000161", "UHID-010565", "DHH2026-084999"):
+            with self.subTest(value="compact-id"):
+                self.assertIn("MRN", self.categories(value))
+        self.assertEqual(self.detector.sanitize("HbA1c 123456")[0], "HbA1c 123456")
+
+    def test_kinship_suffix_and_patient_before_relation(self) -> None:
+        self.assertIn("RELATIVE_NAME", self.categories("Kamal Bhaiya called the lab"))
+        self.assertIn("RELATIVE_NAME", self.categories("Jagdish Chachu: attendant"))
+        self.assertIn("PATIENT_NAME", self.categories("Asha, W/o Kamal, discharged"))
+        self.assertIn("PATIENT_NAME", self.categories("Patient: रीना निषाद आयु: 65 वर्ष"))
+        cleaned, _ = self.detector.sanitize("नाम: रीना निषाद आयु: 65 वर्ष\nरीना निषाद को 6 दिन से बुखार है।")
+        self.assertNotIn("रीना निषाद", cleaned)
+        for sample in ("Reena behenji ka BP 105/77", "Kamal babu ka BP 130/82",
+                       "Irfan ka BP 128/72", "Zenab Bano - K/C/O Bell's palsy"):
+            with self.subTest(sample="hinglish-patient-role"):
+                self.assertIn("PATIENT_NAME", self.categories(sample))
+        self.assertEqual(self.detector.sanitize("Dr. Ramesh ka BP 120/80")[0], "Dr. Ramesh ka BP 120/80")
