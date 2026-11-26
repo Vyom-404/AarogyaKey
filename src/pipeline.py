@@ -21,6 +21,8 @@ from src.detection.detector import field_category, is_medical_field
 from src.linkage import PatientResolver, Pseudonymizer
 from src.linkage.extractor import extract_records
 from src.linkage.models import RecordIdentity
+from src.privacy import build_privacy_actions, collect_privacy_records, equivalence_summary
+from src.privacy.extractor import PrivacyAction, PrivacyRecord
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_POLICY = ROOT / "config" / "policy.yaml"
@@ -276,7 +278,8 @@ def transform_file(
     path: Path, rel: str, max_bytes: int, max_json_depth: int, detector: PIIDetector | None = None,
     identity_records: list[RecordIdentity] | None = None,
     pseudonyms: dict[tuple[str, str], str] | None = None,
-) -> tuple[str, list[dict[str, Any]], int, list[Detection]]:
+    privacy_actions: dict[tuple[str, str], list[PrivacyAction]] | None = None,
+) -> tuple[str, list[dict[str, Any]], int, list[Detection], list[PrivacyAction]]:
     """Decode and serialize a supported file; return text, locators, record count."""
     if path.is_symlink():
         raise UnsafeInput("symlink_input")
@@ -289,7 +292,9 @@ def transform_file(
     detector = detector or PIIDetector()
     identity_records = identity_records or []
     pseudonyms = pseudonyms or {}
+    privacy_actions = privacy_actions or {}
     identities = {record.loc: record for record in identity_records}
+    applied_actions: list[PrivacyAction] = []
     raw = path.read_bytes()
     if not raw.strip():
         raise UnsafeInput("empty_file")
@@ -321,6 +326,12 @@ def transform_file(
         writer.writerow(safe_header)
         table_records = []
         for row_index, row in enumerate(rows[1:]):
+            loc = f"row:{row_index}"
+            row_actions = privacy_actions.get(loc, [])
+            for action in row_actions:
+                if action.stage == "before" and len(action.path) == 1 and isinstance(action.path[0], int):
+                    if action.path[0] < len(row):
+                        row[action.path[0]] = action.replacement
             clean_row = []
             for index, cell in enumerate(row):
                 context = _csv_field_context(rows[0][index], rel, cell) if index < len(rows[0]) else ""
@@ -329,14 +340,17 @@ def transform_file(
                 patient = pseudonyms.get((identity.file, identity.loc)) if identity else None
                 if (patient and identity and identity.carrier and identity.carrier.path == (index,)):
                     value = patient
+                for action in row_actions:
+                    if action.path == (index,):
+                        value = action.replacement
+                        applied_actions.append(action)
                 clean_row.append(value)
                 detections.extend(hits)
             writer.writerow(clean_row)
-            loc = f"row:{row_index}"
             identity = identities.get(loc)
             patient = pseudonyms.get((identity.file, identity.loc)) if identity else None
             table_records.append({"file": output_file, "loc": loc, "patient": patient})
-        return stream.getvalue(), table_records, len(table_records), detections
+        return stream.getvalue(), table_records, len(table_records), detections, applied_actions
 
     if suffix == ".json":
         try:
@@ -347,6 +361,10 @@ def transform_file(
         if isinstance(data, dict) and data.get("resourceType") == "Bundle":
             if not isinstance(data.get("type"), str) or not isinstance(data.get("entry", []), list):
                 raise UnsafeInput("invalid_fhir_bundle")
+        json_actions = [action for group in privacy_actions.values() for action in group]
+        for action in json_actions:
+            if action.stage == "before" and action.path and _set_path(data, action.path, action.replacement):
+                applied_actions.append(action)
         records = _json_records(data, output_file)
         clean_data, detections = _clean_json(data, detector)
         for record in records:
@@ -356,29 +374,32 @@ def transform_file(
             patient = pseudonyms.get((identity.file, identity.loc))
             record["patient"] = patient
             if patient and identity.carrier and identity.carrier.path:
-                target = clean_data
-                try:
-                    for step in identity.carrier.path[:-1]:
-                        target = target[step]
-                    target[identity.carrier.path[-1]] = patient
-                except (KeyError, IndexError, TypeError):
+                if not _set_path(clean_data, identity.carrier.path, patient):
                     # If a structural path cannot be safely replaced, keep the
                     # pseudonym in records.jsonl and insert it at document level.
                     if isinstance(clean_data, dict):
                         clean_data.setdefault("patient_pseudonym", patient)
-        return json.dumps(clean_data, ensure_ascii=False, indent=2) + "\n", records, len(records), detections
+            for action in privacy_actions.get(record["loc"], []):
+                if (action.stage == "after" or action.marker) and action.path:
+                    if _set_path(clean_data, action.path, action.replacement) and action not in applied_actions:
+                        applied_actions.append(action)
+        return json.dumps(clean_data, ensure_ascii=False, indent=2) + "\n", records, len(records), detections, applied_actions
 
     identity = identities.get("doc")
     patient = pseudonyms.get((identity.file, identity.loc)) if identity else None
     records = [{"file": output_file, "loc": "doc", "patient": patient}]
+    doc_actions = privacy_actions.get("doc", [])
+    text = _apply_text_edits(text, doc_actions, "before")
     clean_text, detections = detector.sanitize(text)
+    clean_text = _overlay_markers(clean_text, doc_actions)
+    applied_actions.extend(doc_actions)
     if patient:
         marker = "[PATIENT_NAME]"
         if marker in clean_text:
             clean_text = clean_text.replace(marker, patient, 1)
         else:
             clean_text = clean_text.rstrip() + f"\nPatient ID: {patient}\n"
-    return clean_text, records, 1, detections
+    return clean_text, records, 1, detections, applied_actions
 
 
 def sanitized_relative_path(rel: str, content_hash: str, detector: PIIDetector) -> str:
@@ -388,11 +409,13 @@ def sanitized_relative_path(rel: str, content_hash: str, detector: PIIDetector) 
     for index, part in enumerate(parts):
         suffix = Path(part).suffix if index == len(parts) - 1 else ""
         stem = part[:-len(suffix)] if suffix else part
+        date_pattern = re.compile(r"(?<!\d)(?:\d{4}[-_.]\d{1,2}[-_.]\d{1,2}|\d{1,2}[-_.]\d{1,2}[-_.]\d{4})(?!\d)")
+        stem = date_pattern.sub("[DATE]", stem)
         if detector.find(stem, "filename"):
             prefix = "file" if index == len(parts) - 1 else "folder"
             safe_parts.append(f"{prefix}_{content_hash[:12]}{suffix}")
         else:
-            safe_parts.append(part)
+            safe_parts.append(stem + suffix)
     return "/".join(safe_parts)
 
 
@@ -402,6 +425,37 @@ def peak_rss_mb() -> float:
         return round(value / (1024 if sys.platform != "darwin" else 1024 * 1024), 1)
     except (AttributeError, OSError):
         return 0.0
+
+
+def _set_path(root: Any, path: tuple[str | int, ...], value: Any) -> bool:
+    if not path:
+        return False
+    target = root
+    try:
+        for part in path[:-1]:
+            target = target[part]
+        target[path[-1]] = value
+        return True
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
+def _apply_text_edits(text: str, actions: list[PrivacyAction], stage: str) -> str:
+    edits = [action for action in actions if action.stage == stage and action.span]
+    for action in sorted(edits, key=lambda item: item.span[0], reverse=True):
+        start, end = action.span
+        if 0 <= start <= end <= len(text):
+            text = text[:start] + action.replacement + text[end:]
+    return text
+
+
+def _overlay_markers(text: str, actions: list[PrivacyAction]) -> str:
+    for action in sorted((item for item in actions if item.marker), key=lambda item: (item.marker, -item.marker_index)):
+        occurrences = [match.span() for match in re.finditer(re.escape(action.marker), text)]
+        if action.marker_index < len(occurrences):
+            start, end = occurrences[action.marker_index]
+            text = text[:start] + action.replacement + text[end:]
+    return text
 
 
 def _report_entry(path: Path, raw: bytes | None, status: str, output: str | None, reason: str | None = None) -> dict:
@@ -435,6 +489,11 @@ def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | 
     linkage = PatientResolver(minimum_confidence=minimum_confidence).resolve(
         identity_records, Pseudonymizer(secret)
     )
+    privacy_records = collect_privacy_records(input_dir, max_bytes)
+    privacy_action_index = build_privacy_actions(privacy_records, linkage.pseudonyms, secret, rules)
+    privacy_actions_by_file: dict[str, dict[str, list[PrivacyAction]]] = {}
+    for (privacy_file, privacy_loc), actions in privacy_action_index.items():
+        privacy_actions_by_file.setdefault(privacy_file, {})[privacy_loc] = actions
     identities_by_file: dict[str, list[RecordIdentity]] = {}
     for identity in identity_records:
         identities_by_file.setdefault(identity.file, []).append(identity)
@@ -442,6 +501,9 @@ def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | 
     files_report: list[dict] = []
     records: list[dict[str, Any]] = []
     entity_counts: dict[str, int] = {}
+    generalized_records: set[tuple[str, str]] = set()
+    suppressed_records: set[tuple[str, str]] = set()
+    privacy_action_counts: dict[str, int] = {}
     sanitized_dir = output_dir / "sanitized"
     sanitized_dir.mkdir(parents=True, exist_ok=True)
 
@@ -455,15 +517,23 @@ def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | 
             raw = path.read_bytes()
             content_hash = hashlib.sha256(raw).hexdigest()
             output_rel = sanitized_relative_path(rel, content_hash, detector)
-            result, file_records, _, hits = transform_file(
+            result, file_records, _, hits, applied_actions = transform_file(
                 path, output_rel, max_bytes, max_depth, detector,
                 identities_by_file.get(rel, []), linkage.pseudonyms,
+                privacy_actions_by_file.get(rel, {}),
             )
             destination = sanitized_dir / output_rel
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(result, encoding="utf-8", newline="")
             files_report.append(_report_entry(path, raw, "sanitized", f"sanitized/{output_rel}"))
             records.extend(file_records)
+            for action in applied_actions:
+                ref = (action.file, action.loc)
+                if action.action.startswith(("generalized", "shifted")):
+                    generalized_records.add(ref)
+                if action.action.startswith("suppressed"):
+                    suppressed_records.add(ref)
+                privacy_action_counts[action.action] = privacy_action_counts.get(action.action, 0) + 1
             for hit in hits:
                 entity_counts[hit.category] = entity_counts.get(hit.category, 0) + 1
         except (OSError, UnsafeInput, UnicodeError, RecursionError, csv.Error, ValueError) as exc:
@@ -476,6 +546,8 @@ def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | 
         encoding="utf-8",
     )
     sanitized_count = sum(entry["status"] == "sanitized" for entry in files_report)
+    privacy_after_records = collect_privacy_records(sanitized_dir, max_bytes)
+    risk_summary = equivalence_summary(privacy_records, privacy_after_records, rules)
     report = {
         "schema": "raksha-report/1",
         "files": files_report,
@@ -486,11 +558,12 @@ def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | 
             "records_processed": len(records),
             "identifiers_detected": sum(entity_counts.values()),
             "records_linked": sum(record["patient"] is not None for record in records),
-            "records_generalized": 0,
-            "records_suppressed": 0,
+            "records_generalized": len(generalized_records),
+            "records_suppressed": len(suppressed_records),
             "records_quarantined": 0,
         },
         "entities": dict(sorted(entity_counts.items())),
+        "privacy": {"actions": dict(sorted(privacy_action_counts.items())), "risk": risk_summary},
         "timing": {"seconds": round(time.monotonic() - started, 2)},
         "resources": {"peak_rss_mb": peak_rss_mb()},
     }
