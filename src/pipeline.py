@@ -1,9 +1,4 @@
-"""Phase 1 deterministic ingestion and contract-oriented output pipeline.
-
-This is a runnable baseline. PII detection and privacy transformations are added
-in later phases; the pipeline therefore does not claim to produce a safe release
-for real-world use yet.
-"""
+"""Deterministic privacy transformation, linkage, and contract output pipeline."""
 
 from __future__ import annotations
 
@@ -23,6 +18,9 @@ from typing import Any
 from src.config import load_policy
 from src.detection import Detection, PIIDetector
 from src.detection.detector import field_category, is_medical_field
+from src.linkage import PatientResolver, Pseudonymizer
+from src.linkage.extractor import extract_records
+from src.linkage.models import RecordIdentity
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_POLICY = ROOT / "config" / "policy.yaml"
@@ -275,7 +273,9 @@ def _clean_json(
 
 
 def transform_file(
-    path: Path, rel: str, max_bytes: int, max_json_depth: int, detector: PIIDetector | None = None
+    path: Path, rel: str, max_bytes: int, max_json_depth: int, detector: PIIDetector | None = None,
+    identity_records: list[RecordIdentity] | None = None,
+    pseudonyms: dict[tuple[str, str], str] | None = None,
 ) -> tuple[str, list[dict[str, Any]], int, list[Detection]]:
     """Decode and serialize a supported file; return text, locators, record count."""
     if path.is_symlink():
@@ -287,6 +287,9 @@ def transform_file(
     if size > max_bytes:
         raise UnsafeInput("max_file_size_exceeded")
     detector = detector or PIIDetector()
+    identity_records = identity_records or []
+    pseudonyms = pseudonyms or {}
+    identities = {record.loc: record for record in identity_records}
     raw = path.read_bytes()
     if not raw.strip():
         raise UnsafeInput("empty_file")
@@ -316,19 +319,24 @@ def transform_file(
             safe_header.append(value)
             detections.extend(hits)
         writer.writerow(safe_header)
-        for row in rows[1:]:
+        table_records = []
+        for row_index, row in enumerate(rows[1:]):
             clean_row = []
             for index, cell in enumerate(row):
                 context = _csv_field_context(rows[0][index], rel, cell) if index < len(rows[0]) else ""
                 value, hits = detector.sanitize_scalar(cell, context)
+                identity = identities.get(f"row:{row_index}")
+                patient = pseudonyms.get((identity.file, identity.loc)) if identity else None
+                if (patient and identity and identity.carrier and identity.carrier.path == (index,)):
+                    value = patient
                 clean_row.append(value)
                 detections.extend(hits)
             writer.writerow(clean_row)
-        records = [
-            {"file": output_file, "loc": f"row:{index}", "patient": None}
-            for index in range(max(0, len(rows) - 1))
-        ]
-        return stream.getvalue(), records, len(records), detections
+            loc = f"row:{row_index}"
+            identity = identities.get(loc)
+            patient = pseudonyms.get((identity.file, identity.loc)) if identity else None
+            table_records.append({"file": output_file, "loc": loc, "patient": patient})
+        return stream.getvalue(), table_records, len(table_records), detections
 
     if suffix == ".json":
         try:
@@ -341,10 +349,35 @@ def transform_file(
                 raise UnsafeInput("invalid_fhir_bundle")
         records = _json_records(data, output_file)
         clean_data, detections = _clean_json(data, detector)
+        for record in records:
+            identity = identities.get(record["loc"])
+            if not identity:
+                continue
+            patient = pseudonyms.get((identity.file, identity.loc))
+            record["patient"] = patient
+            if patient and identity.carrier and identity.carrier.path:
+                target = clean_data
+                try:
+                    for step in identity.carrier.path[:-1]:
+                        target = target[step]
+                    target[identity.carrier.path[-1]] = patient
+                except (KeyError, IndexError, TypeError):
+                    # If a structural path cannot be safely replaced, keep the
+                    # pseudonym in records.jsonl and insert it at document level.
+                    if isinstance(clean_data, dict):
+                        clean_data.setdefault("patient_pseudonym", patient)
         return json.dumps(clean_data, ensure_ascii=False, indent=2) + "\n", records, len(records), detections
 
-    records = [{"file": output_file, "loc": "doc", "patient": None}]
+    identity = identities.get("doc")
+    patient = pseudonyms.get((identity.file, identity.loc)) if identity else None
+    records = [{"file": output_file, "loc": "doc", "patient": patient}]
     clean_text, detections = detector.sanitize(text)
+    if patient:
+        marker = "[PATIENT_NAME]"
+        if marker in clean_text:
+            clean_text = clean_text.replace(marker, patient, 1)
+        else:
+            clean_text = clean_text.rstrip() + f"\nPatient ID: {patient}\n"
     return clean_text, records, 1, detections
 
 
@@ -397,6 +430,14 @@ def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | 
     max_bytes = int(rules.get("max_file_bytes", 50 * 1024 * 1024))
     max_depth = int(rules.get("max_json_depth", 100))
     detector = harvest_input_names(input_dir, max_bytes, max_depth)
+    identity_records = extract_records(input_dir, detector, max_bytes)
+    minimum_confidence = float(rules.get("linkage_min_confidence", 0.92))
+    linkage = PatientResolver(minimum_confidence=minimum_confidence).resolve(
+        identity_records, Pseudonymizer(secret)
+    )
+    identities_by_file: dict[str, list[RecordIdentity]] = {}
+    for identity in identity_records:
+        identities_by_file.setdefault(identity.file, []).append(identity)
     started = time.monotonic()
     files_report: list[dict] = []
     records: list[dict[str, Any]] = []
@@ -414,7 +455,10 @@ def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | 
             raw = path.read_bytes()
             content_hash = hashlib.sha256(raw).hexdigest()
             output_rel = sanitized_relative_path(rel, content_hash, detector)
-            result, file_records, _, hits = transform_file(path, output_rel, max_bytes, max_depth, detector)
+            result, file_records, _, hits = transform_file(
+                path, output_rel, max_bytes, max_depth, detector,
+                identities_by_file.get(rel, []), linkage.pseudonyms,
+            )
             destination = sanitized_dir / output_rel
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(result, encoding="utf-8", newline="")
@@ -441,7 +485,7 @@ def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | 
             "files_quarantined": len(files_report) - sanitized_count,
             "records_processed": len(records),
             "identifiers_detected": sum(entity_counts.values()),
-            "records_linked": 0,
+            "records_linked": sum(record["patient"] is not None for record in records),
             "records_generalized": 0,
             "records_suppressed": 0,
             "records_quarantined": 0,
