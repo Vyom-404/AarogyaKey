@@ -44,3 +44,26 @@ def generalize_age(value: object, width: int = 5, senior_from: int = 85,
         return None
     age, suffix = parsed
     return age_band(age, width, senior_from, minor_boundaries) + suffix
+
+
+def _duration_days(value: object) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    match = re.fullmatch(r"\s*(\d{1,4})\s*(?:d|day|days|दिन)?\s*", str(value), re.I)
+    if not match:
+        return None
+    days = int(match.group(1))
+    return days if 0 <= days <= 3650 else None
+
+
+def generalize_stay(value: object) -> str | None:
+    days = _duration_days(value)
+    if days is None:
+        return None
+    if days <= 3:
+        return "1-3 days"
+    if days <= 7:
+        return "4-7 days"
+    if days <= 14:
+        return "8-14 days"
+    return "15+ days"
