@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -154,13 +155,14 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outside_input"):
             run_pipeline(self.inp, nested, "unit-test-secret")
 
-    def test_symlink_is_reported_without_following_target(self) -> None:
+    def test_symlink_is_quarantined_and_referent_is_only_hashed(self) -> None:
         target = self.root / "sensitive.txt"
         target.write_text("target content", encoding="utf-8")
         (self.inp / "linked.txt").symlink_to(target)
         report = self.run_it()
         self.assertEqual(report["files"][0]["status"], "quarantined")
         self.assertEqual(report["files"][0]["reason"], "symlink_input")
+        self.assertEqual(report["files"][0]["input_sha256"], hashlib.sha256(target.read_bytes()).hexdigest())
         self.assertFalse((self.out / "sanitized/linked.txt").exists())
 
     def test_input_is_not_modified(self) -> None:
