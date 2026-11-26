@@ -40,7 +40,8 @@ _CLINICAL_TERMS = {
     "bell's palsy", "bell palsy", "chronic kidney disease", "ckd", "type 2 diabetes mellitus",
     "surgery", "medicine", "pediatrics", "paediatrics", "cardiology", "neurology",
     "oncology", "orthopedics", "orthopaedics", "obstetrics", "gynecology", "gynaecology",
-    "emergency", "intensive care", "icu", "general medicine",
+    "emergency", "intensive care", "icu", "general medicine", "appendectomy",
+    "cholecystectomy", "biopsy", "dialysis", "intubation", "angioplasty",
 }
 _TERM_RX = re.compile(
     r"(?i)(?<![\w])(?:" + "|".join(re.escape(term) for term in sorted(_CLINICAL_TERMS, key=len, reverse=True)) + r")(?![\w])"
