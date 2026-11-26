@@ -14,7 +14,11 @@ from src.linkage.extractor import decode_input
 from src.privacy.date_shifter import parse_date
 
 SUPPORTED = {".csv", ".tsv", ".json", ".txt"}
-_DATE_KEY = re.compile(r"date|datetime|birth|dob|admission|discharge|visit|encounter|recorded|effective|performed|onset|lastupdated", re.I)
+_EVENT_DATE_KEYS = {
+    "createdat", "updatedat", "createdon", "updatedon", "exportedat", "timestamp", "timestamputc",
+    "recorded", "recordedat", "effective", "effectiveat", "performed", "performedat", "onset",
+    "lastupdated", "lastupdatedat",
+}
 _AGE_KEY = re.compile(r"^(?:age|patientage|age_sex|ageyears|umar|वय|आयु|उम्र)$", re.I)
 _DATE_VALUE = re.compile(
     r"(?<!\d)(?:\d{4}-\d{1,2}-\d{1,2}(?:[T ][0-9:.+-]+Z?)?|\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})(?!\d)"
@@ -68,9 +72,9 @@ def _key_kind(key: str, parent: str = "") -> str | None:
         return "age"
     if normalized in {"birthdate", "dateofbirth", "dob", "janmtithi"}:
         return "dob"
-    if normalized in {"createdat", "updatedat", "createdon", "updatedon", "exportedat", "timestamp", "timestamputc"}:
+    if normalized in _EVENT_DATE_KEYS:
         return "event_date"
-    if _DATE_KEY.search(normalized) or (normalized in {"start", "end"} and "encounterperiod" in parent_n):
+    if normalized.startswith("date") or normalized.endswith(("date", "datetime")) or (normalized in {"start", "end"} and "encounterperiod" in parent_n):
         return "event_date"
     if normalized in {"house", "houseno", "housenumber", "street", "line", "landmark", "premise", "flat", "addressline"}:
         return "address_detail"
