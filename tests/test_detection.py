@@ -104,3 +104,14 @@ class DetectionTests(unittest.TestCase):
         for phrase in ("Asha ji 48 Y/F", "Mr. Aarav Kulkarni", "Smt. Kavita Rao"):
             with self.subTest(phrase=phrase):
                 self.assertIn("PATIENT_NAME", self.categories(phrase))
+
+    def test_report_of_name_anchor_and_clinical_negative(self) -> None:
+        self.assertIn("PATIENT_NAME", self.categories("Report of Anaya Qureshi age 44/F"))
+        self.assertEqual(self.detector.sanitize("Report of Dengue age 44/F")[0], "Report of Dengue age 44/F")
+        self.assertIn("PATIENT_NAME", self.categories("Report of आरव शर्मा age 31/M"))
+
+    def test_known_name_in_identifier_header_is_removed_but_schema_survives(self) -> None:
+        self.detector.add_name("Anaya Qureshi", trusted=True)
+        self.assertEqual(self.detector.sanitize_header_or_key("Anaya Qureshi")[0], "[PATIENT_NAME]")
+        self.assertEqual(self.detector.sanitize_header_or_key("source_path")[0], "source_path")
+        self.assertEqual(self.detector.sanitize_header_or_key("JJH-0077112 Zainab")[0], "[MRN] [PATIENT_NAME]")
