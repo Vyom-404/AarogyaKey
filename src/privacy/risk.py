@@ -65,8 +65,9 @@ def _feature(record: PrivacyRecord, kind: str, actions: dict[tuple[str | int, ..
     return "|".join(sorted(set(values)))
 
 
-def _hospital(record: PrivacyRecord) -> str:
-    explicit = _feature(record, "hospital")
+def _hospital(record: PrivacyRecord,
+              actions: dict[tuple[str | int, ...], str] | None = None) -> str:
+    explicit = _feature(record, "hospital", actions)
     if explicit:
         return explicit
     parts = record.file.split("/")
@@ -78,7 +79,7 @@ def _tuple(record: PrivacyRecord, dimensions: tuple[str, ...],
     override = (actions or {}).get((record.file, record.loc), {})
     values = []
     for dimension in dimensions:
-        value = _hospital(record) if dimension == "hospital" else _feature(record, dimension, override)
+        value = _hospital(record, override) if dimension == "hospital" else _feature(record, dimension, override)
         values.append(value or "<missing>")
     return tuple(values)
 
