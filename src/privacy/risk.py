@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import statistics
+import datetime as dt
 from collections import Counter
 from typing import Any
 
@@ -11,6 +12,32 @@ from src.detection.normalization import normalize_text
 from src.privacy.date_shifter import parse_date
 from src.privacy.extractor import PrivacyRecord
 from src.privacy.generalization import age_band, generalize_stay, parse_age
+
+
+def _month_key(value: str) -> str:
+    parsed = parse_date(value)
+    if parsed:
+        return parsed.value.strftime("%Y-%m")
+    text = value.strip()
+    match = re.fullmatch(r"(\d{4})[-/](\d{1,2})", text)
+    if match:
+        year, month = map(int, match.groups())
+    else:
+        match = re.fullmatch(r"(\d{1,2})[./-](\d{4})", text)
+        if match:
+            month, year = map(int, match.groups())
+        else:
+            for fmt in ("%B %Y", "%b %Y"):
+                try:
+                    return dt.datetime.strptime(text, fmt).strftime("%Y-%m")
+                except ValueError:
+                    pass
+            if re.fullmatch(r"\d{4}", text):
+                return text
+            return text
+    if 1 <= month <= 12:
+        return f"{year:04d}-{month:02d}"
+    return text
 
 
 def _feature(record: PrivacyRecord, kind: str, actions: dict[tuple[str | int, ...], str] | None = None) -> str:
@@ -34,8 +61,7 @@ def _feature(record: PrivacyRecord, kind: str, actions: dict[tuple[str | int, ..
     if kind == "event_date_exact" and values:
         pass
     elif kind == "event_date" and values:
-        values = [parse_date(value).value.strftime("%Y-%m") if parse_date(value) else value[:7]
-                  for value in values]
+        values = [_month_key(value) for value in values]
     return "|".join(sorted(set(values)))
 
 
