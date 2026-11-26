@@ -4,3 +4,9 @@ max_json_depth: 100
 date_shift_max_days: 365
 age_band_years: 5
 senior_age_from: 85
+minor_age_boundaries: 0,5,10,15,18
+pin_prefix_digits: 3
+minimum_equivalence_class: 3
+rare_diagnosis_max_count: 2
+rare_diagnosis_action: preserve
+unresolved_date_precision: month
