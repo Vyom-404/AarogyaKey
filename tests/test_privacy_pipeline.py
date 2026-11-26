@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.privacy import DateShifter, age_band, build_privacy_actions, collect_privacy_records, equivalence_summary
 from src.privacy.date_shifter import format_date, month_precision, parse_date
@@ -128,5 +130,21 @@ class RiskAndPipelineTests(unittest.TestCase):
             run_pipeline(root, output, "phase4 deterministic test secret")
             exported_paths = [entry["output"] for entry in json.loads((output / "report.json").read_text())["files"]]
             self.assertFalse(any("2025-06-10" in str(name) for name in exported_paths))
+
+    def test_report_timing_includes_preprocessing(self) -> None:
+        import src.pipeline as pipeline
+
+        original = pipeline.harvest_input_names
+
+        def delayed_harvest(*args, **kwargs):
+            time.sleep(0.25)
+            return original(*args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as input_dir, tempfile.TemporaryDirectory() as output_parent:
+            (Path(input_dir) / "note.txt").write_text("Diagnosis: asthma\n", encoding="utf-8")
+            output = Path(output_parent) / "out"
+            with patch("src.pipeline.harvest_input_names", side_effect=delayed_harvest):
+                report = run_pipeline(Path(input_dir), output, "phase7 timing test secret")
+            self.assertGreaterEqual(report["timing"]["seconds"], 0.2)
 
 

@@ -574,6 +574,7 @@ def _validate_output_tree(output_dir: Path, secret: str) -> None:
 def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | None = None) -> dict:
     from src.security.secret_manager import validate_secret
 
+    started = time.monotonic()
     validate_secret(secret)
     if input_dir.is_symlink():
         raise ValueError("input_path_unsafe") from None
@@ -606,7 +607,6 @@ def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | 
     identities_by_file: dict[str, list[RecordIdentity]] = {}
     for identity in identity_records:
         identities_by_file.setdefault(identity.file, []).append(identity)
-    started = time.monotonic()
     files_report: list[dict] = []
     records: list[dict[str, Any]] = []
     entity_counts: dict[str, int] = {}
