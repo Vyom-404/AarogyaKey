@@ -140,3 +140,77 @@ def _walk_json(record: PrivacyRecord, node: Any, path: tuple[str | int, ...] = (
     elif isinstance(node, list):
         for index, child in enumerate(node):
             _walk_json(record, child, path + (index,), parent, resource_type)
+
+
+def _text_fields(record: PrivacyRecord, text: str) -> None:
+    label_patterns = {
+        "dob": r"(?:date\s+of\s+birth|dob|birth\s+date|जन्म\s*तिथि|जन्म\s*दिनांक)",
+        "event_date": r"(?:date\s+of\s+(?:admission|discharge)|admission\s+date|discharge\s+date|visit\s+date|encounter\s+date|reg\s+date|visit|admission|discharge|date(?!\s+of\s+birth)|दिनांक|तारीख)",
+        "age": r"(?:patient\s+age|age|umar|आयु|उम्र|वय)",
+        "locality": r"(?:village|gaon|gram|mohalla|locality|ward|गांव|गाँव|ग्राम)",
+        "tehsil": r"(?:tehsil|taluka|तहसील)",
+        "district": r"(?:district|jila|zilla|जिला)",
+        "pin": r"(?:pin(?:\s*code)?|postal\s*code|pincode)",
+        "address": r"(?:address|residence|पता)",
+        "address_detail": r"(?:house\s*(?:no|number)?|street|landmark|mohalla\s*address)",
+        "diagnosis": r"(?:diagnosis|assessment|clinical\s+impression|dx|निदान)",
+        "stay": r"(?:length\s+of\s+stay|stay\s+duration|hospital\s+stay|los)",
+    }
+    for kind, label in label_patterns.items():
+        pattern = re.compile(rf"(?im)^\s*{label}\s*[:=#-]\s*([^\n;|]+)")
+        for match in pattern.finditer(text):
+            start, end = match.span(1)
+            raw = match.group(1).strip().rstrip(",")
+            left = start + (len(match.group(1)) - len(match.group(1).lstrip()))
+            right = left + len(raw)
+            if kind in {"event_date", "dob"}:
+                date_match = _DATE_VALUE.search(raw)
+                if not date_match:
+                    continue
+                left += date_match.start()
+                right = left + len(date_match.group())
+                raw = date_match.group()
+            record.add(kind, raw, kind, (f"@{left}:{right}",), (left, right))
+
+
+def collect_privacy_records(input_dir: Path, max_bytes: int = 50 * 1024 * 1024) -> list[PrivacyRecord]:
+    """Read QI-bearing values and output paths without writing raw values anywhere."""
+    records: list[PrivacyRecord] = []
+    for current, dirs, names in os.walk(input_dir, followlinks=False):
+        base = Path(current)
+        dirs[:] = sorted(d for d in dirs if not (base / d).is_symlink())
+        for name in sorted(names):
+            path = base / name
+            if path.is_symlink() or path.suffix.lower() not in SUPPORTED:
+                continue
+            try:
+                if path.stat().st_size > max_bytes:
+                    continue
+                rel = path.relative_to(input_dir).as_posix()
+                text = decode_input(path.read_bytes())
+                suffix = path.suffix.lower()
+                if suffix in {".csv", ".tsv"}:
+                    rows = list(csv.reader(text.splitlines(), delimiter="\t" if suffix == ".tsv" else ",", strict=True))
+                    if not rows:
+                        continue
+                    for row_index, row in enumerate(rows[1:]):
+                        item = PrivacyRecord(rel, f"row:{row_index}", suffix[1:])
+                        for column, value in enumerate(row):
+                            if column < len(rows[0]):
+                                kind = _key_kind(rows[0][column])
+                                if kind:
+                                    item.add(kind, value, rows[0][column], (column,))
+                        records.append(item)
+                elif suffix == ".json":
+                    data = json.loads(text)
+                    for loc, root, node in _record_roots(data, rel):
+                        item = PrivacyRecord(rel, loc, "json")
+                        _walk_json(item, node, root)
+                        records.append(item)
+                else:
+                    item = PrivacyRecord(rel, "doc", "text")
+                    _text_fields(item, text)
+                    records.append(item)
+            except (OSError, UnicodeError, ValueError, csv.Error, RecursionError):
+                continue
+    return sorted(records, key=lambda item: (item.file, item.loc))
