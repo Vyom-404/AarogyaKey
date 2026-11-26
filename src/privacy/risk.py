@@ -78,3 +78,28 @@ def _class_stats(records: list[PrivacyRecord], dimensions: tuple[str, ...],
             "5_plus": sum(size >= 5 for size in groups.values()),
         },
     }
+
+
+def equivalence_summary(before: list[PrivacyRecord], after: list[PrivacyRecord],
+                        policy: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Compare raw and released record uniqueness for declared QI combinations."""
+    policy = policy or {}
+    combos = {
+        "demographic_geography_hospital": ("age", "locality", "tehsil", "district", "pin", "hospital"),
+        "extended_profile_month": ("age", "locality", "tehsil", "district", "pin", "event_date", "stay", "diagnosis", "hospital"),
+        "extended_profile_exact_date": ("age", "locality", "tehsil", "district", "pin", "event_date_exact", "stay", "diagnosis", "hospital"),
+    }
+
+    minimum_k = int(policy.get("minimum_equivalence_class", 3))
+
+    def stats(records: list[PrivacyRecord]) -> dict[str, Any]:
+        return {name: _class_stats(records, dims, minimum_k=minimum_k) for name, dims in combos.items()}
+
+    before_stats, after_stats = stats(before), stats(after)
+    return {
+        "method": "record-level exact equivalence classes over extracted QI dimensions; separate month-precision and exact-date combinations",
+        "minimum_k_target": minimum_k,
+        "before": before_stats,
+        "after": after_stats,
+        "interpretation": "Singleton share is a measured uniqueness indicator, not an anonymity guarantee or a simulated organizer-attack probability.",
+    }
