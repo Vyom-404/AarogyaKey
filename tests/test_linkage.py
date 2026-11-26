@@ -104,6 +104,27 @@ class ResolverTests(unittest.TestCase):
 
 
 class ExtractionAndPipelineTests(unittest.TestCase):
+    def test_devanagari_tsv_headers_are_linkage_fields_and_values_are_sanitized(self) -> None:
+        with tempfile.TemporaryDirectory() as input_dir, tempfile.TemporaryDirectory() as output_parent:
+            root = Path(input_dir)
+            source = root / "hindi.tsv"
+            source.write_text(
+                "नाम\tपिता_का_नाम\tमोबाइल\tगांव\tपिन\tडॉक्टर\tनिदान\tदवा\n"
+                "कविता शर्मा\tरमेश शर्मा\t9876543210\tरामपुर\t226021\tडॉ. सीमा वर्मा\tबुखार\tपैरासिटामोल 500 mg\n",
+                encoding="utf-8",
+            )
+            identities = extract_file_records(source, "hindi.tsv", PIIDetector())
+            categories = {signal.category for signal in identities[0].signals}
+            self.assertTrue({"PATIENT_NAME", "RELATIVE_NAME", "PHONE", "VILLAGE", "PIN"}.issubset(categories))
+
+            out = Path(output_parent) / "output"
+            run_pipeline(root, out, "this is a sufficiently long secret")
+            exported = (out / "sanitized/hindi.tsv").read_text(encoding="utf-8")
+            self.assertNotIn("कविता शर्मा", exported)
+            self.assertNotIn("रमेश शर्मा", exported)
+            self.assertIn("डॉ. सीमा वर्मा", exported)
+            self.assertIn("पैरासिटामोल 500 mg", exported)
+
     def test_nested_patient_json_identifier_is_extracted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "records.json"

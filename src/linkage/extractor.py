@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from src.detection import PIIDetector
-from src.detection.detector import field_category, is_medical_field
+from src.detection.detector import field_category, is_medical_field, normalize_field_name
 from src.detection.normalization import name_keys, normalize_text
 from src.linkage.models import Carrier, RecordIdentity
 from src.security.filesystem import read_regular_file
@@ -26,7 +26,7 @@ _CLINICAL_RESOURCES = {
 _PATIENT_KEYS = {"patient", "subject", "beneficiary", "patientreference", "patient_ref", "patient_reference"}
 _RELATIVE_KEYS = {"relative", "guardian", "next_of_kin", "nextofkin", "emergency_contact", "father", "mother"}
 _NAME_KEYS = {"name", "patient_name", "patientname", "fullname", "full_name", "given", "family",
-              "first", "last", "firstname", "lastname", "middle", "local", "display"}
+              "first", "last", "firstname", "lastname", "middle", "local", "display", "नाम"}
 _GLOBAL_IDS = {"AADHAAR", "ABHA_NUMBER", "PAN", "EMAIL"}
 _CARRIER_PRIORITY = {"MRN": 0, "AADHAAR": 1, "ABHA_NUMBER": 1, "PAN": 1,
                      "INSURANCE_ID": 2, "PATIENT_NAME": 3, "EMAIL": 4, "PHONE": 5}
@@ -201,7 +201,7 @@ def _name_role_values(node: Any, candidate: RecordIdentity, rel: str, path: tupl
     elif isinstance(node, dict):
         pieces: list[tuple[str, tuple[str | int, ...]]] = []
         for key, child in node.items():
-            nkey = re.sub(r"[^a-z0-9]", "", str(key).casefold())
+            nkey = normalize_field_name(str(key)).replace(" ", "")
             if nkey in _NAME_KEYS and isinstance(child, (str, int, float)):
                 pieces.append((str(child), path + (str(key),)))
             elif isinstance(child, (dict, list)):
@@ -227,7 +227,7 @@ def _walk_json(node: Any, candidate: RecordIdentity, rel: str, path: tuple[str |
             role = "clinical"
         for key, child in node.items():
             key_text = str(key)
-            nkey = re.sub(r"[^a-z0-9]", "", key_text.casefold())
+            nkey = normalize_field_name(key_text).replace(" ", "")
             child_path = path + (key_text,)
             category = field_category(key_text)
             if nkey in _PATIENT_KEYS:
@@ -259,7 +259,7 @@ def _walk_json(node: Any, candidate: RecordIdentity, rel: str, path: tuple[str |
                     _name_role_values(child, candidate, rel, child_path, "relative")
                 continue
             if category and not is_medical_field(key_text):
-                if nkey in {"age", "patientage", "umar", "years"}:
+                if nkey in {"age", "patientage", "umar", "years", "आयु", "उम्र", "वय"}:
                     _add_value(candidate, "AGE", child, key_text, rel, child_path, patient_role=role == "patient")
                 elif isinstance(child, (str, int, float)):
                     _add_value(candidate, category, child, key_text, rel, child_path,
@@ -267,12 +267,12 @@ def _walk_json(node: Any, candidate: RecordIdentity, rel: str, path: tuple[str |
                 elif category in {"MRN", "AADHAAR", "ABHA_NUMBER", "PAN", "PHONE", "EMAIL", "INSURANCE_ID"}:
                     _walk_identifier(child, candidate, rel, child_path, key_text)
                 continue
-            if nkey in {"age", "patientage", "umar", "years"}:
+            if nkey in {"age", "patientage", "umar", "years", "आयु", "उम्र", "वय"}:
                 _add_value(candidate, "AGE", child, key_text, rel, child_path, patient_role=role != "clinical")
-            elif nkey in {"dob", "birthdate", "dateofbirth", "janmtithi"}:
+            elif nkey in {"dob", "birthdate", "dateofbirth", "janmtithi", "जन्मतिथि", "जन्मदिनांक", "जन्मतारीख"}:
                 _add_value(candidate, "DOB", child, key_text, rel, child_path, patient_role=role != "clinical")
-            elif nkey in {"village", "gaon", "gram", "city", "town", "district", "jila", "pin", "pincode", "postalcode"}:
-                loc_category = "VILLAGE" if nkey in {"village", "gaon", "gram"} else "PIN" if "pin" in nkey or "postal" in nkey else "DISTRICT" if nkey in {"district", "jila"} else "LOCALITY"
+            elif nkey in {"village", "gaon", "gram", "city", "town", "district", "jila", "pin", "pincode", "postalcode", "गांव", "गाँव", "ग्राम", "शहर", "नगर", "जिला", "ज़िला", "पिन", "पिनकोड"}:
+                loc_category = "VILLAGE" if nkey in {"village", "gaon", "gram", "गांव", "गाँव", "ग्राम"} else "PIN" if "pin" in nkey or "postal" in nkey or nkey in {"पिन", "पिनकोड"} else "DISTRICT" if nkey in {"district", "jila", "जिला", "ज़िला"} else "LOCALITY"
                 _add_value(candidate, loc_category, child, key_text, rel, child_path, patient_role=role != "clinical")
             elif isinstance(child, (dict, list)):
                 _walk_json(child, candidate, rel, child_path, role, rt)
@@ -329,23 +329,23 @@ def extract_file_records(path: Path, rel: str, detector: PIIDetector,
                         continue
                     header = headers[col]
                     category = field_category(header)
-                    nheader = re.sub(r"[^a-z0-9]", "", header.casefold())
+                    nheader = normalize_field_name(header).replace(" ", "")
                     field_path: tuple[str | int, ...] = (col,)
-                    if nheader in {"age", "umar", "patientage", "ageyears"}:
+                    if nheader in {"age", "umar", "patientage", "ageyears", "आयु", "उम्र", "वय"}:
                         _add_value(candidate, "AGE", value, header, rel, field_path)
-                    elif nheader in {"dob", "dateofbirth", "birthdate", "janmtithi"} or category == "DOB":
+                    elif nheader in {"dob", "dateofbirth", "birthdate", "janmtithi", "जन्मतिथि", "जन्मदिनांक", "जन्मतारीख"} or category == "DOB":
                         _add_value(candidate, "DOB", value, header, rel, field_path)
-                    elif nheader in {"first", "firstname", "givenname"}:
+                    elif nheader in {"first", "firstname", "givenname", "पहला", "प्रथमनाम"}:
                         first = (value, field_path)
-                    elif nheader in {"last", "lastname", "surname", "familyname"}:
+                    elif nheader in {"last", "lastname", "surname", "familyname", "उपनाम", "अंतिमनाम"}:
                         last = (value, field_path)
                     elif category:
                         _add_value(candidate, category, value, header, rel, field_path,
                                    patient_role=category != "RELATIVE_NAME")
-                    elif nheader in {"village", "gaon", "gram", "village_mohalla"}:
+                    elif nheader in {"village", "gaon", "gram", "village_mohalla", "गांव", "गाँव", "ग्राम"}:
                         _add_value(candidate, "VILLAGE", value, header, rel, field_path)
-                    elif nheader in {"city", "town", "district", "jila", "jilha"}:
-                        cat = "DISTRICT" if nheader in {"district", "jila", "jilha"} else "LOCALITY"
+                    elif nheader in {"city", "town", "district", "jila", "jilha", "जिला", "ज़िला", "शहर", "नगर"}:
+                        cat = "DISTRICT" if nheader in {"district", "jila", "jilha", "जिला", "ज़िला"} else "LOCALITY"
                         _add_value(candidate, cat, value, header, rel, field_path)
                 if first and last:
                     _add_value(candidate, "PATIENT_NAME", first[0] + " " + last[0], "patient_name", rel, first[1])

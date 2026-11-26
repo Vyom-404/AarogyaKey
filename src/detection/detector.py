@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 import re
+import unicodedata
 from dataclasses import dataclass
 
 from src.detection.medical import protected_spans
@@ -30,13 +31,13 @@ _FIELD_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("INSURANCE_ID", re.compile(r"insurance|policy|claim.?id|claim.?no|insurer|member.?no|member.?id|scheme|coverage|pmjay|ayushman|health.?card|ration.?card|benefit.?id|बीमा|पॉलिसी", re.I)),
     ("MRN", re.compile(r"^identifier$|mrn|uhid|\bpatient[ _-]*(?:id|ref|reference|identifier|number|no)\b|medical.?record|identifier|record.?no|registration.?no|reg.?no|ipd.?no|opd.?no|encounter.?no|admission.?no|hospital.?(?:uhid|mrn|no)|accession.?(?:id|no|number)|visit.?(?:id|no|number)", re.I)),
     ("DOB", re.compile(r"date.?of.?birth|dob|birth.?date|जन्म.?तिथि|जन्म.?दिनांक|जन्म.?तारीख|janm.?tithi", re.I)),
-    ("PIN", re.compile(r"^pin$|pin.?code|pin.?no|postal.?code|zip(?:.?code)?|pincode|post.?code|पिन.?कोड", re.I)),
+    ("PIN", re.compile(r"^pin$|pin.?code|pin.?no|postal.?code|zip(?:.?code)?|pincode|post.?code|^पिन$|पिन.?कोड", re.I)),
     ("HOUSE", re.compile(r"^house$|house.?no|h.?no|flat.?no|makaan|makan|ghar|मकान|घर.?नंबर|घर.?नं|गृह.?संख्या|मकान.?नंबर", re.I)),
     ("LOCALITY", re.compile(r"locality|mohalla|colony|ward.?address|ilaaka|basti|मोहल्ला|मुहल्ला|इलाका|क्षेत्र|वार्ड|टोला|शहर|जिला|ज़िला|राज्य", re.I)),
     ("VILLAGE", re.compile(r"village|gram|gaon|गांव|गाँव|ग्राम|मौजा", re.I)),
     ("LANDMARK", re.compile(r"landmark|near.?by|nishan|पास.?में|नज़दीक|निशान", re.I)),
     ("ADDRESS", re.compile(r"address|addr|residence|street|pata|पता", re.I)),
-    ("RELATIVE_NAME", re.compile(r"relative|guardian|next.?of.?kin|father|mother|husband|wife|(?:^|\s)(?:pita|pati|patni|beta|beti|putra|putri)(?:\s|$)|s/o|d/o|w/o|c/o|son.?of|daughter.?of|पिता|पुत्र|पुत्री|पति|पत्नी", re.I)),
+    ("RELATIVE_NAME", re.compile(r"relative|guardian|next.?of.?kin|father|mother|husband|wife|(?:^|\s)(?:pita|pati|patni|beta|beti|putra|putri)(?:\s|$)|s/o|d/o|w/o|c/o|son.?of|daughter.?of|पिता|पिताजी|माता|माताजी|पुत्र|पुत्री|पति|पत्नी|अभिभावक", re.I)),
     ("PATIENT_NAME", re.compile(r"patient.?name|full.?name|first.?name|last.?name|given.?name|family.?name|beneficiary.?name|member.?name|surname|^name$|^naam$|नाम|रोगी|मरीज", re.I)),
     ("PATIENT_NAME", re.compile(r"^(?:author|created.?by|updated.?by|uploaded.?by|raised.?by|reported.?by|entered.?by|submitted.?by|sender|recipient|contact.?person)$", re.I)),
     ("METADATA", re.compile(r"^(?:source.?path|source.?file|origin.?path|import.?path|export.?path|file.?path|attachment.?path)$", re.I)),
@@ -50,12 +51,16 @@ _EMAIL = re.compile(r"(?i)(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _PAN = re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b", re.I)
 _PIN = re.compile(r"(?<!\d)[1-9]\d{5}(?!\d)")
 _GENERIC_ID = re.compile(r"(?i)(?:\b(?:UHID|MRN|IPD|OPD|IP|ABHA|Patient\s*(?:ID|Ref(?:erence)?|Identifier|No|Number)|Medical\s*Record\s*(?:No|Number)|Reg(?:istration)?\s*(?:No|ID|Number)|Admission\s*(?:No|Number)|Encounter\s*(?:ID|No)|Case\s*(?:ID|No)|Visit\s*(?:ID|No|Number)|Accession\s*(?:ID|No|Number)|Hospital\s*(?:UHID|MRN|No|ID)|Insurance\s*(?:ID|No)|Policy\s*(?:No|ID)|Claim\s*(?:ID|No))\s*[:#./-]?\s*)([A-Z0-9][A-Z0-9./_-]{3,})")
-_AADHAAR_LABEL = re.compile(r"(?i)(?:aadhaar|aadhar|uid)\s*(?:no|number|id)?\s*[:#-]?\s*((?:\d[\s-]?){11}\d)")
-_ABHA_LABEL = re.compile(r"(?i)(?:abha(?:\s*(?:address|number|id))?|health\s*id)\s*[:#-]?\s*([\w.@-]{6,})")
+_AADHAAR_LABEL = re.compile(r"(?i)(?:aadhaar|aadhar|uid|आधार)\s*(?:(?:no|number|id)|(?:संख्या|नंबर|नं))?\s*[:#-]?\s*((?:\d[\s-]?){11}\d)")
+_ABHA_LABEL = re.compile(r"(?i)(?:abha(?:\s*(?:address|number|id))?|health\s*id|आभा(?:\s*(?:संख्या|नंबर|आईडी))?)\s*[:#-]?\s*([\w.@-]{6,})")
 _EMAIL_LABEL = re.compile(r"(?i)(?:e-?mail)\s*[:=]\s*([^\s,;]+)")
-_PHONE_LABEL = re.compile(r"(?i)(?:phone|mobile|contact|whatsapp|फोन|मोबाइल|संपर्क)\s*(?:no|number)?\s*[:=.-]?\s*([+\d(][\d\s().+-]{7,16}\d)")
+_PHONE_LABEL = re.compile(r"(?i)(?:phone|mobile|contact|whatsapp|फोन|मोबाइल|संपर्क|दूरभाष)\s*(?:no|number|नंबर|नं)?\s*[:=.-]?\s*([+\d(][\d\s().+-]{7,16}\d)")
 _NAME_LABEL = re.compile(
-    r"(?i)(?:patient(?:'s)?\s*name|patient|pt\.?|full\s*name|name|रोगी\s*का\s*नाम|मरीज\s*का\s*नाम|नाम|रोगी|मरीज)\s*[:=#-]\s*"
+    r"(?i)(?:patient(?:'s)?\s*(?:ka\s*)?name|patient\s+ka\s+naam|patient|pt\.?|full\s*name|name|naam|रोगी\s*का\s*नाम|मरीज\s*का\s*नाम|मरीज़\s*का\s*नाम|रोगी|मरीज|मरीज़|नाम)\s*[:=#\-–—]\s*"
+    r"([A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*(?:\s+[A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*){0,3})"
+)
+_HINDI_RELATION_LABEL = re.compile(
+    r"(?i)(?:पिता|पिताजी|माता|माताजी|पति|पत्नी|अभिभावक|संरक्षक)\s*(?:का|की|के)?\s*(?:नाम)?\s*[:=#\-–—]\s*"
     r"([A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*(?:\s+[A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*){0,3})"
 )
 _HONORIFIC_NAME = re.compile(r"(?i)(?:\b(?:mr|mrs|ms|shri|smt|mohd)\.?|श्री|श्रीमती|श्रीम|मोहतरमा)\s+([A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*(?:\s+[A-Z\u0900-\u097f][A-Z\u0900-\u097f.'’\-]*){0,2})")
@@ -110,6 +115,13 @@ _SCHEMA_WORDS = {
     "relative", "guardian", "source_path", "origin_path", "file_path", "relative_name",
     "ref", "patient_ref", "patient_reference", "accession", "visit", "identifier",
 }
+_HINDI_SCHEMA_WORDS = {
+    "नाम", "रोगी", "मरीज", "मरीज़", "पिता", "पिताजी", "माता", "माताजी", "पति", "पत्नी",
+    "अभिभावक", "संरक्षक", "का", "की", "के", "मोबाइल", "फोन", "संपर्क", "दूरभाष",
+    "गांव", "गाँव", "ग्राम", "पिन", "कोड", "जिला", "ज़िला", "शहर", "नगर", "मकान",
+    "घर", "पता", "आयु", "उम्र", "वय", "जन्म", "तिथि", "दिनांक", "तारीख", "अस्पताल",
+    "डॉक्टर", "चिकित्सक", "दवा", "निदान", "लक्षण", "जांच", "दवा", "खुराक", "मात्रा",
+}
 _NAME_SPELLINGS = {
     "mohammad": ("mohammad", "mohammed", "muhammad", "mohd", "md"),
     "mohammed": ("mohammad", "mohammed", "muhammad", "mohd", "md"),
@@ -117,8 +129,32 @@ _NAME_SPELLINGS = {
 }
 
 
+def normalize_field_name(field_name: str) -> str:
+    """Normalize schema labels without dropping Devanagari vowel marks.
+
+    Python's ``\w`` does not include all combining marks. Splitting a Hindi
+    label with ``\W`` therefore turns e.g. ``नाम`` into ``न म`` and prevents
+    both detection and linkage from recognizing the column.
+    """
+    normalized = normalize_text(field_name)
+    output: list[str] = []
+    in_separator = False
+    for char in normalized:
+        if char == "_" or unicodedata.category(char)[0] in {"P", "Z", "S"}:
+            if output and not in_separator:
+                output.append(" ")
+            in_separator = True
+            continue
+        # Keep letters, digits, combining marks, and format marks used in
+        # Indic text; discard controls and other non-schema characters.
+        if unicodedata.category(char)[0] in {"L", "M", "N"} or char == "\u200d":
+            output.append(char)
+            in_separator = False
+    return "".join(output).strip()
+
+
 def field_category(field_name: str) -> str | None:
-    field = re.sub(r"[_\W]+", " ", normalize_text(field_name), flags=re.UNICODE).strip()
+    field = normalize_field_name(field_name)
     # Strong identifiers keep priority over broad medical resource words such
     # as "hospital" (e.g. hospital_uhid is still a direct identifier field).
     for category, pattern in _FIELD_PATTERNS:
@@ -141,6 +177,15 @@ def is_medical_field(field_name: str) -> bool:
 def _is_known_case_of_prefix(text: str, start: int) -> bool:
     """K/C/O means known case of, not care-of relative."""
     return bool(re.search(r"(?i)\bk\s*/\s*$", text[max(0, start - 8):start]))
+
+
+def _nonpatient_name_label_context(text: str, start: int) -> bool:
+    prefix = text[max(0, start - 48):start]
+    return bool(re.search(
+        r"(?i)(?:(?:डॉक्टर|चिकित्सक|वैद्य|doctor|physician|provider|clinician)\s*(?:का|की|के)?|"
+        r"(?:father|mother|husband|wife|guardian|पिता|पिताजी|माता|माताजी|पति|पत्नी|अभिभावक|संरक्षक)\s*(?:का|की|के)?)\s*$",
+        prefix,
+    ))
 
 
 class PIIDetector:
@@ -293,12 +338,16 @@ class PIIDetector:
                     self.add_sensitive_value(kind, match.group(1))
         for rx in (_NAME_LABEL, _RELATION):
             for match in rx.finditer(text):
+                if rx is _NAME_LABEL and _nonpatient_name_label_context(text, match.start()):
+                    continue
                 if rx is _RELATION and _is_known_case_of_prefix(text, match.start()):
                     continue
                 is_name = rx is _NAME_LABEL
                 self.add_sensitive_value("PATIENT_NAME" if is_name else "RELATIVE_NAME", match.group(1))
                 if is_name:
                     self.add_name(match.group(1), trusted=True)
+        for match in _HINDI_RELATION_LABEL.finditer(text):
+            self.add_sensitive_value("RELATIVE_NAME", match.group(1))
         for match in _NAME_LABEL_REPORT_OF.finditer(text):
             self.add_sensitive_value("PATIENT_NAME", match.group(1))
             self.add_name(match.group(1), trusted=True)
@@ -378,7 +427,11 @@ class PIIDetector:
         for match in _ADDRESS_LABEL.finditer(text): add(match, "ADDRESS", 0.92, "address_label", 1)
         for match in _HOUSE.finditer(text): add(match, "HOUSE", 0.92, "house_label", 1)
         for match in _NAME_LABEL.finditer(text):
+            if _nonpatient_name_label_context(text, match.start()):
+                continue
             add(match, "PATIENT_NAME", 0.96, "identity_label", 1)
+        for match in _HINDI_RELATION_LABEL.finditer(text):
+            add(match, "RELATIVE_NAME", 0.95, "hindi_relationship_label", 1)
         for match in _NAME_LABEL_REPORT_OF.finditer(text):
             add(match, "PATIENT_NAME", 0.95, "report_subject_context", 1)
         for match in _NAME_BEFORE_RELATION.finditer(text):
@@ -543,6 +596,11 @@ class PIIDetector:
 
     def sanitize_header_or_key(self, value: str) -> tuple[str, list[Detection]]:
         tokens = [token.casefold() for token in _TOKEN.findall(value)]
+        # Keep recognized schema labels intact, including Hindi labels, while
+        # still inspecting mixed headers such as "Patient Name <person>".
+        schema_words = _SCHEMA_WORDS | _HINDI_SCHEMA_WORDS
+        if field_category(value) and tokens and set(tokens).issubset(schema_words):
+            return value, []
         if re.fullmatch(r"(?i)(?:stay[_\W]+duration|hospital[_\W]+stay|length[_\W]+of[_\W]+stay)", value.strip()):
             return value, []
         if 1 <= len(tokens) <= 4 and set(tokens).issubset(_SCHEMA_WORDS):

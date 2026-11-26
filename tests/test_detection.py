@@ -100,6 +100,33 @@ class DetectionTests(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertEqual(field_category(field), category)
 
+    def test_devanagari_schema_labels_preserve_combining_marks(self) -> None:
+        for field, category in (
+            ("नाम", "PATIENT_NAME"),
+            ("पिता_का_नाम", "RELATIVE_NAME"),
+            ("मोबाइल", "PHONE"),
+            ("गांव", "VILLAGE"),
+            ("पिन", "PIN"),
+        ):
+            with self.subTest(field=field):
+                self.assertEqual(field_category(field), category)
+                self.assertEqual(self.detector.sanitize_header_or_key(field)[0], field)
+
+    def test_full_hindi_and_hinglish_prescription_name_context(self) -> None:
+        cases = (
+            ("नाम: अनन्या यादव\nअनन्या यादव को 3 दिन से बुखार है।", "अनन्या यादव"),
+            ("रोगी का नाम—विवेक कुमार\nविवेक कुमार को खांसी है।", "विवेक कुमार"),
+            ("Patient ka naam: Nisha Verma; 2 din se bukhar hai", "Nisha Verma"),
+            ("पिता का नाम: महेश प्रसाद", "महेश प्रसाद"),
+        )
+        for text, name in cases:
+            with self.subTest(sample="Hindi or Hinglish clinical note"):
+                cleaned, _ = self.detector.sanitize(text)
+                self.assertNotIn(name, cleaned)
+        # A provider's name is clinical attribution, not the patient's identity.
+        provider = "डॉक्टर का नाम: डॉ. सीमा वर्मा; दवा: पैरासिटामोल 500 mg दिन में दो बार"
+        self.assertEqual(self.detector.sanitize(provider)[0], provider)
+
     def test_name_anchors_cover_honorific_and_age_forms(self) -> None:
         for phrase in ("Asha ji 48 Y/F", "Mr. Aarav Kulkarni", "Smt. Kavita Rao"):
             with self.subTest(phrase=phrase):
