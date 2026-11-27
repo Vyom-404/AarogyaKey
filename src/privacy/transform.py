@@ -62,6 +62,7 @@ def build_privacy_actions(records: list[PrivacyRecord], pseudonyms: dict[tuple[s
     minimum_k = int(policy.get("minimum_equivalence_class", 3))
     rare_count_max = int(policy.get("rare_diagnosis_max_count", 2))
     rare_diagnosis_action = str(policy.get("rare_diagnosis_action", "preserve")).casefold()
+    preserve_exact_stay = bool(policy.get("preserve_exact_stay_duration", True))
     shifter = DateShifter(secret, shift_days)
     grouped: dict[tuple[str, str], list[PrivacyAction]] = defaultdict(list)
     record_by_ref = {(item.file, item.loc): item for item in records}
@@ -164,6 +165,8 @@ def build_privacy_actions(records: list[PrivacyRecord], pseudonyms: dict[tuple[s
                 continue
             for field in item.fields:
                 if field.kind == "stay":
+                    if preserve_exact_stay:
+                        continue
                     replacement = generalize_stay(field.value)
                     key = (item.file, item.loc, field.path, field.kind)
                     existing = action_by_field.get(key)

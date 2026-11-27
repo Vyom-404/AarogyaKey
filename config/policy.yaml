@@ -9,4 +9,5 @@ pin_prefix_digits: 3
 minimum_equivalence_class: 3
 rare_diagnosis_max_count: 2
 rare_diagnosis_action: preserve
+preserve_exact_stay_duration: true
 unresolved_date_precision: month
