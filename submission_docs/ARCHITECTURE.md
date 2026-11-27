@@ -1,6 +1,6 @@
 # Architecture
 
-Raksha is an offline, deterministic privacy-processing command line program. It uses Python and a small cryptography dependency; the configured run path makes no model, cloud, or network calls.
+AarogyaKey is an offline, deterministic healthcare privacy-processing command line program. It uses Python and a small cryptography dependency; the configured run path makes no model, cloud, or network calls.
 
 ## Data flow
 

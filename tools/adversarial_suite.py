@@ -384,7 +384,7 @@ def _attacker_simulation(profiles: list[dict[str, Any]], sanitized: list[dict[st
 
 
 def run_seed(seed: int, vary_profiles: bool = False) -> dict[str, Any]:
-    with tempfile.TemporaryDirectory(prefix="raksha-adversarial-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="aarogyakey-adversarial-") as temporary:
         work = Path(temporary)
         manifest = generate_corpus(work, seed, vary_profiles=vary_profiles)
         source: Path = manifest["source"]
@@ -532,7 +532,7 @@ def main() -> int:
     args = parser.parse_args()
     summaries = [run_seed(seed) for seed in args.seeds]
     summaries.extend(run_seed(seed, vary_profiles=True) for seed in args.varied_seeds)
-    payload = {"suite": "Secret Wards independent adversarial suite", "version": "phase6-synthetic-v1",
+    payload = {"suite": "AarogyaKey independent adversarial suite", "version": "phase6-synthetic-v1",
                "seeds": args.seeds, "varied_seeds": args.varied_seeds, "runs": summaries}
     rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     if args.summary:
