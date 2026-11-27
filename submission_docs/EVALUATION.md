@@ -52,4 +52,5 @@ The latest checker run found `submission_docs/PROJECT_BRIEF.pdf`, which is a dra
 - There is no universal output PII scanner for arbitrary new schemas or opaque attachments.
 - At-rest encryption is not used for current in-memory intermediates; Python memory/swap and secure erasure are outside the guarantees.
 - Local CPU/RSS measurements do not establish the organizer's whole-process-tree maximum resource behavior on hidden input.
+- The exact-stay default protects clinical fidelity but leaves stay duration available as a quasi-identifier; the tested singleton rates did not improve or worsen on the four small generated cohorts.
 - The final Google Docs Project Brief has not been provided for review; its content and team details remain unverified.
