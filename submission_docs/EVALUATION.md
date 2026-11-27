@@ -39,8 +39,8 @@ The synthetic auxiliary-registry attack showed a fall in unique matches after sa
 - Compilation: passed (`compileall` over source, tools, tests, and entry point).
 - Official output validator: `CONTRACT OK`.
 - Official three-run submission checker: `READY TO SUBMIT` for its run checks: exact configured command succeeded, same-secret outputs matched, changed-secret output differed, secret was absent, and input remained unchanged.
-- Practice checker: 0/3,230 PII, 0/4 canaries, 4,855/4,855 probes, precision 1.00 / recall 0.26 / F0.5 0.63, no wrong merges or raw copies.
-- Independent adversarial suite: four runs completed successfully with results summarized above.
+- Practice checker: 0/3,230 PII, 0/4 canaries, 4,855/4,855 probes, precision 1.00 / recall 0.36 / F0.5 0.74, no wrong merges or raw copies.
+- Independent adversarial suite: four runs completed successfully; 48/48 exact duration values retained per run, zero PII surfaces, and zero false merges across the eight linkage scenarios per run.
 
 The checker printed “Project Brief PDF found” because it recursively found an ignored scanned-practice PDF under `.local-evaluation/official-kit/dev/input/`. That is organizer fixture data, not a team brief. The checker accepts any `.pdf` recursively under the repo except files under top-level `dev`, `.git`, and `.venv`; it does not inspect filename, page count, or content. Official written requirements specify a maximum two-page A4 PDF and readable text of at least 10 pt, but no exact filename or directory. The prepared brief is `submission_docs/PROJECT_BRIEF.pdf`.
 
