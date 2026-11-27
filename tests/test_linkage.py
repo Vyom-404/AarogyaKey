@@ -124,6 +124,16 @@ class ResolverTests(unittest.TestCase):
         right = result.pseudonyms.get((b.file, b.loc))
         self.assertFalse(left is not None and left == right)
 
+    def test_same_scoped_mrn_and_phone_do_not_override_conflicting_dob(self) -> None:
+        a = record("hospital-a/registration.csv", dob="1980-01-01", mrn="MRN-613", scope="hospital-a")
+        b = record("hospital-a/lab.csv", dob="1990-01-01", mrn="MRN-613", scope="hospital-a")
+        a.add("PHONE", "9876543210")
+        b.add("PHONE", "9876543210")
+        result = self.resolver.resolve([a, b], self.pseudo)
+        left = result.pseudonyms.get((a.file, a.loc))
+        right = result.pseudonyms.get((b.file, b.loc))
+        self.assertFalse(left is not None and left == right)
+
 
 class ExtractionAndPipelineTests(unittest.TestCase):
     def test_devanagari_tsv_headers_are_linkage_fields_and_values_are_sanitized(self) -> None:
