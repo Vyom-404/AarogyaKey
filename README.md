@@ -7,10 +7,29 @@ This repository is the team's implementation for the Secret Wards privacy firewa
 Set a secret through the environment, then invoke the CLI:
 
 ```bash
-RAKSHA_SECRET=local-practice python3 main.py --input PATH/TO/input --output PATH/TO/output
+export RAKSHA_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+python3 main.py --input PATH/TO/input --output PATH/TO/output
 ```
 
 The output directory must be new or empty and must be outside the input directory. The program creates `sanitized/`, `report.json`, and `records.jsonl`. Supported files are CSV, TSV, JSON, and plain text. Unsupported, malformed, empty, oversized, too-deep, or symlink inputs are reported as quarantined and are not copied to the sanitized release. The input tree is read-only from the program's perspective.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    I[Input files] --> S[Safe scan and decoding]
+    S --> E[Identity and privacy evidence]
+    E --> D[Multilingual detection and clinical protection]
+    E --> L[Conservative linkage and HMAC pseudonyms]
+    L --> Q[Date and quasi-identifier policy]
+    D --> W[Format-aware rewrite]
+    Q --> W
+    W --> O[sanitized/]
+    L --> R[records.jsonl]
+    W --> P[report.json]
+```
+
+The main strength is an offline, explainable workflow that handles mixed English, Hindi/Devanagari, and Hinglish while protecting recognized clinical values. Privacy and utility remain a trade-off: linkage intentionally leaves weak cases unresolved, age and location lose precision, and deterministic date shifts preserve within-patient intervals. Exact length-of-stay values are retained by default; stay bucketing is an explicit opt-in policy because it changes clinical detail.
 
 ## Configuration and dependencies
 
@@ -27,7 +46,8 @@ python3 -m unittest discover -s tests -v
 The local organizer kit is stored in `.local-evaluation/official-kit/`. It is git-ignored because it contains the practice answer key; do not add it to a submission commit. Run the application and organizer checks from this directory:
 
 ```bash
-RAKSHA_SECRET=local-practice python3 main.py --input .local-evaluation/official-kit/dev/input --output /private/tmp/raksha-check
+export RAKSHA_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+python3 main.py --input .local-evaluation/official-kit/dev/input --output /private/tmp/raksha-check
 python3 .local-evaluation/official-kit/validate_output.py --input .local-evaluation/official-kit/dev/input --output /private/tmp/raksha-check
 python3 .local-evaluation/official-kit/check_dev.py --output /private/tmp/raksha-check
 python3 .local-evaluation/official-kit/check_submission.py --repo . --run
@@ -39,6 +59,6 @@ The copied practice input contains a scanned PDF, so `check_submission.py` may i
 
 ## Current scope and next work
 
-Phase 1 provides recursive discovery, encoding handling, CSV/TSV/JSON/text serialization, JSON record locators, conservative quarantine, report generation, and records JSONL. Phase 2 adds multilingual explainable detection and medical-value protection. Phase 3 adds conservative patient linkage and keyed pseudonyms; Phase 4 adds consistent date shifting, age/location generalization, and equivalence-class risk measures; Phase 5 adds key separation, an AES-GCM envelope for any required sensitive persistence, privacy-safe logs, bounded no-follow reads, and private atomic output writes. Full FHIR R4 validation and a universal automatic output PII scanner remain limitations. Practice checks do not establish hidden-data performance.
+Phase 1 provides recursive discovery, encoding handling, CSV/TSV/JSON/text serialization, JSON record locators, conservative quarantine, report generation, and records JSONL. Phase 2 adds multilingual explainable detection and medical-value protection. Phase 3 adds conservative patient linkage and keyed pseudonyms; Phase 4 adds consistent date shifting, age/location generalization, and equivalence-class risk measures; Phase 5 adds key separation, an AES-GCM envelope for any required sensitive persistence, privacy-safe logs, bounded no-follow reads, and private atomic output writes. Exact stay-duration preservation is the default; generalization is opt-in. Full FHIR R4 validation and a universal automatic output PII scanner remain limitations. Practice checks do not establish hidden-data performance.
 
 See `prd.md`, `docs/WORKSPACE_AUDIT.md`, and `docs/IMPLEMENTATION_PLAN.md` for requirements and current findings.
