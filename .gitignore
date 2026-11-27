@@ -5,4 +5,5 @@ out/
 
 .local-evaluation/
 docs/
-doctor/prd.md
+/prd.md
+/PRD.md
