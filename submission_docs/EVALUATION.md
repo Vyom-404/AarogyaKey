@@ -47,9 +47,9 @@ The latest checker run found `submission_docs/PROJECT_BRIEF.pdf`, which is a dra
 ## Limitations and failures
 
 - Phase 6.1 singleton share remains 61.11% on the original generated set and 100% on the varied generated set.
-- Linkage recall remains 0.26 on the practice fixture; weak/conflicting evidence is often intentionally unresolved.
+- Linkage recall remains incomplete at 0.36 on the practice fixture; many name-only or conflicting-evidence pairs are intentionally unresolved.
 - FHIR Bundle processing is not full R4 schema/reference validation.
 - There is no universal output PII scanner for arbitrary new schemas or opaque attachments.
 - At-rest encryption is not used for current in-memory intermediates; Python memory/swap and secure erasure are outside the guarantees.
 - Local CPU/RSS measurements do not establish the organizer's whole-process-tree maximum resource behavior on hidden input.
-- Team member names were not available during this audit; the PDF intentionally marks that field for completion rather than inventing identities.
+- The final Google Docs Project Brief has not been provided for review; its content and team details remain unverified.
