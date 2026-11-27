@@ -35,7 +35,7 @@ The synthetic auxiliary-registry attack showed a fall in unique matches after sa
 
 ## Current validation
 
-- Unit tests: 99 passed.
+- Unit tests: 100 passed.
 - Compilation: passed (`compileall` over source, tools, tests, and entry point).
 - Official output validator: `CONTRACT OK`.
 - Official three-run submission checker: `READY TO SUBMIT` for its run checks: exact configured command succeeded, same-secret outputs matched, changed-secret output differed, secret was absent, and input remained unchanged.
