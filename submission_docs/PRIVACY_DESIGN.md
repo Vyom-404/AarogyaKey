@@ -8,9 +8,9 @@ The tested practice profile is English, Hindi/Devanagari, and Hinglish. Detectio
 
 ## Linkage and pseudonyms
 
-`src/linkage/` extracts identity evidence and compares records using conservative blocks, agreement, and conflict checks. Strong identifiers can support cross-hospital and cross-script linkage. Weak or conflicting evidence is rejected or left unresolved to limit false merges. Patient pseudonyms are derived using HMAC with a dedicated HKDF-separated key purpose and the runtime `RAKSHA_SECRET`; raw identifiers are not used as pseudonyms.
+`src/linkage/` extracts identity evidence and compares records using conservative blocks, agreement, and conflict checks. A complete validated 12-digit Aadhaar value and ABHA number can support cross-hospital and cross-script linkage; Aadhaar values are not considered strong unless all 12 digits are present. A masked Aadhaar exposes only a suffix and is not treated as a unique linkage key. Weak or conflicting evidence is rejected or left unresolved to limit false merges. Patient pseudonyms are derived using HMAC with a dedicated HKDF-separated key purpose and the runtime `RAKSHA_SECRET`; raw identifiers are not used as pseudonyms.
 
-Practice linkage remains high precision and incomplete: precision 1.00, recall 0.36, F0.5 0.74, and zero observed wrong merges in the latest run. A narrowly scoped rule accepts an exact MRN within the same inferred hospital namespace when no contradictory DOB, global identifier, or incompatible name is present. Most name-only or otherwise weak pairs remain unresolved.
+Practice linkage remains high precision and incomplete: precision 1.00, recall 0.36, F0.5 0.74, and zero observed wrong merges in the latest run. A narrowly scoped rule accepts an exact MRN within the same inferred hospital namespace when no contradictory DOB, global identifier, or incompatible name is present. A matching name, village, and age alone are not treated as sufficient identity evidence because multiple residents can share those attributes. Weak or otherwise ambiguous pairs remain unresolved.
 
 ## Quasi-identifiers
 

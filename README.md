@@ -173,7 +173,7 @@ Medical-value rules protect recognized clinical fields and patterns so that medi
 
 ### Linkage and pseudonyms
 
-The linkage resolver prioritizes precision and rejects hard conflicts. An exact MRN within the same inferred hospital namespace can link records when there is no contradictory date of birth, global identifier, or incompatible name. Identifier values are scoped where appropriate because local MRN/insurance numbers can repeat at different hospitals. Name-only or otherwise weak matches can remain unresolved.
+The linkage resolver prioritizes precision and rejects hard conflicts. An exact MRN within the same inferred hospital namespace can link records when there is no contradictory date of birth, global identifier, or incompatible name. Identifier values are scoped where appropriate because local MRN/insurance numbers can repeat at different hospitals. A shared name, village, and age—even with a one-year age change—are not enough on their own to distinguish homonyms; such records remain unresolved unless additional identity evidence supports a match.
 
 Patient pseudonyms are HMAC-derived using a purpose-specific key derived from `RAKSHA_SECRET`. The same secret and identity anchor produce stable pseudonyms; changing the secret changes them. Pseudonyms are identifiers, not encryption of the source data.
 
@@ -263,7 +263,7 @@ The latest local practice run recorded:
 - Wrong merges observed by the practice checker: **0**.
 - Output validator: **`CONTRACT OK`**.
 - Official three-run checker: **`READY TO SUBMIT`** for its software checks.
-- Unit tests: **101 passed**; compilation passed.
+- Unit tests: **108 passed**; compilation passed.
 
 These are local practice/synthetic results, not organizer hidden-test results. The same evaluation identified high singleton rates in small re-identification cohorts (22/36 on one fixed cohort and 36/36 on a varied cohort), incomplete linkage recall, and partial rather than comprehensive FHIR validation. Review [`submission_docs/EVALUATION.md`](submission_docs/EVALUATION.md) for the consolidated evidence and limitations. The final external Project Brief is not validated by this README or by the checker’s PDF-presence result.
 
