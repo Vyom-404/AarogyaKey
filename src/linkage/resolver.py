@@ -175,6 +175,7 @@ class PatientResolver:
                          if _scoped(left, cat).intersection(_scoped(right, cat))]
         shared_local = [cat for cat in _LOCAL_STRONG
                         if _scoped(left, cat).intersection(_scoped(right, cat))]
+        same_scoped_mrn = bool(_scoped(left, "MRN").intersection(_scoped(right, "MRN")))
         shared_phone = bool(_bucket(left, "PHONE").intersection(_bucket(right, "PHONE")))
         same_dob = bool(_bucket(left, "DOB").intersection(_bucket(right, "DOB")))
         same_relative = bool(_bucket(left, "RELATIVE_NAME").intersection(_bucket(right, "RELATIVE_NAME")))
@@ -189,6 +190,14 @@ class PatientResolver:
         if shared_global:
             evidence.extend("exact_" + category.casefold() for category in sorted(shared_global))
             confidence = 0.995
+        elif same_scoped_mrn:
+            # An exact MRN within the same inferred hospital namespace is a
+            # strong identifier by itself. Contradictory DOB/global IDs and
+            # incompatible names have already been rejected above.
+            evidence.append("exact_hospital_scoped_mrn")
+            if shared_phone:
+                evidence.append("shared_phone")
+            confidence = 0.985 if shared_phone else 0.97
         elif shared_local and (same_name or same_dob):
             evidence.extend("exact_" + category.casefold() for category in sorted(shared_local))
             confidence = 0.985
