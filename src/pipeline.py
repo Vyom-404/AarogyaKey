@@ -704,7 +704,7 @@ def run_pipeline(input_dir: Path, output_dir: Path, secret: str, policy: dict | 
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Secret Wards privacy firewall baseline")
+    parser = argparse.ArgumentParser(description="AarogyaKey healthcare data privacy firewall")
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args(argv)

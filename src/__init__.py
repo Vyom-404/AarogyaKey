@@ -1,2 +1,2 @@
-"""Secret Wards privacy firewall."""
+"""AarogyaKey healthcare data privacy firewall."""
 
