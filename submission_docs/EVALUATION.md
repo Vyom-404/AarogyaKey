@@ -42,11 +42,7 @@ The synthetic auxiliary-registry attack showed a fall in unique matches after sa
 - Practice checker: 0/3,230 PII, 0/4 canaries, 4,855/4,855 probes, precision 1.00 / recall 0.36 / F0.5 0.74, no wrong merges or raw copies.
 - Independent adversarial suite: four runs completed successfully; 48/48 exact duration values retained per run, zero PII surfaces, and zero false merges across the eight linkage scenarios per run.
 
-The checker printed “Project Brief PDF found” because it recursively found an ignored scanned-practice PDF under `.local-evaluation/official-kit/dev/input/`. That is organizer fixture data, not a team brief. The checker accepts any `.pdf` recursively under the repo except files under top-level `dev`, `.git`, and `.venv`; it does not inspect filename, page count, or content. Official written requirements specify a maximum two-page A4 PDF and readable text of at least 10 pt, but no exact filename or directory. The prepared brief is `submission_docs/PROJECT_BRIEF.pdf`.
-
-To isolate the checker from the organizer fixture, a clean staging copy was built with only tracked project files and the intended brief PDF. The checker identified exactly `submission_docs/PROJECT_BRIEF.pdf`; its three configured runs passed, including contract, determinism, changed-secret, and unchanged-input checks. The PDF itself was verified as two A4 pages, and known practice surfaces and canaries were not found in its extracted text.
-
-The software and brief file pass the checks performed, but the **complete submission package is not ready until the team member names are filled in** on the marked field and the final PDF is rechecked. The checker cannot detect this missing team detail.
+The latest checker run found `submission_docs/PROJECT_BRIEF.pdf`, which is a draft. The checker only checks for a recursively located PDF; it does not verify whether that document is the final brief, its page count, content, or team details. The final Project Brief will be created separately in Google Docs by the user. The software checker result therefore does not verify the final brief artifact.
 
 ## Limitations and failures
 
