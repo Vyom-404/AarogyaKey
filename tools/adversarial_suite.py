@@ -479,6 +479,9 @@ def run_seed(seed: int, vary_profiles: bool = False) -> dict[str, Any]:
             return []
 
         stay_key_count = count_key(sanitized_json, "stay_duration")
+        stay_value_counts = Counter(collect_stay_values(sanitized_json))
+        expected_stay_values = Counter({"3 days": 32, "2 days": 16})
+        exact_stay_values_retained = sum((stay_value_counts & expected_stay_values).values())
         attacker = _attacker_simulation(manifest["qi_profiles"], sanitized_json, seed)
         linkage = linkage_scenarios(seed)
         report_path = output / "report.json"
@@ -498,6 +501,8 @@ def run_seed(seed: int, vary_profiles: bool = False) -> dict[str, Any]:
             "clinical_probes_missing": missing_clinical,
             "stay_duration_fields_preserved": stay_key_count,
             "stay_duration_fields_generalized": report.get("privacy", {}).get("actions", {}).get("generalized_stay", 0),
+            "stay_duration_exact_values_retained": exact_stay_values_retained,
+            "stay_duration_exact_values_expected": sum(expected_stay_values.values()),
             "impossible_calendar_dates_generalized": report.get("privacy", {}).get("actions", {}).get(
                 "generalized_invalid_date", 0),
             "clinician_names_preserved": len(manifest["clinicians"]) - len(missing_clinicians),
