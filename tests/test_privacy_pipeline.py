@@ -14,6 +14,20 @@ from src.pipeline import run_pipeline
 
 
 class RiskAndPipelineTests(unittest.TestCase):
+    def test_exact_stay_duration_is_preserved_by_default(self) -> None:
+        record = PrivacyRecord("hospital/a.json", "/records/0", "json")
+        record.add("stay", "9 days", "stay_duration", ("records", 0, "stay_duration"))
+        actions = build_privacy_actions([record], {}, "phase4 deterministic test secret")
+        self.assertNotIn("generalized_stay", {action.action for action in actions.get((record.file, record.loc), [])})
+
+    def test_stay_bucketing_remains_an_explicit_opt_in(self) -> None:
+        record = PrivacyRecord("hospital/a.json", "/records/0", "json")
+        record.add("stay", "9 days", "stay_duration", ("records", 0, "stay_duration"))
+        opted_in = build_privacy_actions(
+            [record], {}, "phase4 deterministic test secret", {"preserve_exact_stay_duration": False}
+        )
+        self.assertIn("generalized_stay", {action.action for action in opted_in[(record.file, record.loc)]})
+
     def test_rare_diagnosis_generalizes_only_for_low_k_record(self) -> None:
         record = PrivacyRecord("hospital/a.json", "/records/0", "json")
         record.add("age", "41", "age", ("records", 0, "age"))
