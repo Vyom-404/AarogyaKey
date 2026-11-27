@@ -263,7 +263,7 @@ The latest local practice run recorded:
 - Wrong merges observed by the practice checker: **0**.
 - Output validator: **`CONTRACT OK`**.
 - Official three-run checker: **`READY TO SUBMIT`** for its software checks.
-- Unit tests: **100 passed**; compilation passed.
+- Unit tests: **101 passed**; compilation passed.
 
 These are local practice/synthetic results, not organizer hidden-test results. The same evaluation identified high singleton rates in small re-identification cohorts (22/36 on one fixed cohort and 36/36 on a varied cohort), incomplete linkage recall, and partial rather than comprehensive FHIR validation. Review [`submission_docs/EVALUATION.md`](submission_docs/EVALUATION.md) for the consolidated evidence and limitations. The final external Project Brief is not validated by this README or by the checker’s PDF-presence result.
 

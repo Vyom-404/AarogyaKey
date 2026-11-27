@@ -33,14 +33,21 @@ The synthetic auxiliary-registry attack showed a fall in unique matches after sa
 - Phase 4/4.1 re-identification work corrected a measurement issue. Later phase reports document changes in date-based equivalence groups and the Phase 6.1 singleton limitation above.
 - Phase 5/5.1 found the AES-GCM persistence helper is available but unused by the live in-memory pipeline. Fourteen date-shift actions in a prior comparison had no pairable output date because text sanitization subsequently removed those spans; they were not evidence of inconsistent shifts, but remain an accounting/verification limitation.
 
+## DOB/date-shift collision investigation
+
+A checker run found a DOB surface in a different row's `Reg Date` after date shifting. The DOB field itself had been replaced with `[DOB]`; the shifted event date happened to equal that original DOB elsewhere in the same file. The practice fixture contains two byte-identical copies of the file, so the same collision was counted twice. The checker uses file-wide substring matching, so it reports the surface regardless of which row or field contains it.
+
+The privacy action planner now compares shifted event dates with parsed DOB dates from the input. If one would reproduce any input DOB date, it generalizes only that event date to month precision and records `generalized_date_collision`. Other exact dates for that patient keep the same deterministic shift. A synthetic regression test forces this collision and checks that the affected event date is generalized while the next event retains the patient's original offset. In the latest practice run the checker reported 0/3,230 PII surfaces, 0/4 canaries, and 4,855/4,855 medical probes preserved.
+
 ## Current validation
 
-- Unit tests: 100 passed.
+- Unit tests: 101 passed.
 - Compilation: passed (`compileall` over source, tools, tests, and entry point).
 - Official output validator: `CONTRACT OK`.
 - Official three-run submission checker: `READY TO SUBMIT` for its run checks: exact configured command succeeded, same-secret outputs matched, changed-secret output differed, secret was absent, and input remained unchanged.
 - Practice checker: 0/3,230 PII, 0/4 canaries, 4,855/4,855 probes, precision 1.00 / recall 0.36 / F0.5 0.74, no wrong merges or raw copies.
 - Independent adversarial suite: four runs completed successfully; 48/48 exact duration values retained per run, zero PII surfaces, and zero false merges across the eight linkage scenarios per run.
+- DOB/date collision regression: passed; the latest practice checker reports no DOB surface leakage.
 
 The latest checker run found `submission_docs/PROJECT_BRIEF.pdf`, which is a draft. The checker only checks for a recursively located PDF; it does not verify whether that document is the final brief, its page count, content, or team details. The final Project Brief will be created separately in Google Docs by the user. The software checker result therefore does not verify the final brief artifact.
 
