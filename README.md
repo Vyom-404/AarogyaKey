@@ -1,6 +1,6 @@
-# Secret Wards — Raksha Privacy Firewall
+# AarogyaKey — Healthcare Data Privacy Firewall
 
-Secret Wards is an offline Python application for sanitizing healthcare datasets before release. It scans supported files, detects patient and relative identifiers, protects recognized clinical information, links records when there is enough identity evidence, applies configured privacy transformations, and writes a contract-compatible output package.
+AarogyaKey is an offline Python application for sanitizing healthcare datasets before release. It scans supported files, detects patient and relative identifiers, protects recognized clinical information, links records when there is enough identity evidence, applies configured privacy transformations, and writes the required output package.
 
 The implementation is designed for CPU-only local execution. It does not call cloud services, hosted AI APIs, or an LLM. Its checks are based on the included tests and the organizer's practice data; they do not guarantee privacy or correctness on unseen data.
 
@@ -40,7 +40,7 @@ The detector is rule-based and explainable. It does not guarantee detection of e
 - The packages listed in `requirements.txt` (currently `cryptography` for the security/key-management components).
 - A `RAKSHA_SECRET` containing at least 16 UTF-8 bytes.
 
-From the repository root (`doctor/`):
+From the repository root (`AarogyaKey/`):
 
 ```bash
 python3 -m venv .venv
@@ -58,14 +58,14 @@ Put the files to sanitize in an input directory. The application walks the direc
 ### macOS or Linux
 
 ```bash
-cd /path/to/doctor
+cd /path/to/AarogyaKey
 source .venv/bin/activate
 
 # Generate one high-entropy secret for this shell session.
 export RAKSHA_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 
 INPUT="/absolute/path/to/your/input"
-OUTPUT="$(mktemp -d /tmp/raksha-output.XXXXXX)"
+OUTPUT="$(mktemp -d /tmp/aarogyakey-output.XXXXXX)"
 python3 main.py --input "$INPUT" --output "$OUTPUT"
 printf 'Sanitized output: %s\n' "$OUTPUT"
 ```
@@ -227,7 +227,7 @@ python3 -m compileall -q src tools tests main.py
 python3 tools/adversarial_suite.py \
   --seeds 61027 93811 \
   --varied-seeds 28697 74671 \
-  --summary /tmp/raksha-adversarial-summary.json
+  --summary /tmp/aarogyakey-adversarial-summary.json
 ```
 
 The adversarial suite generates synthetic records. Do not add generated outputs or organizer practice data to Git.
@@ -236,7 +236,7 @@ If the ignored organizer kit is present locally, run its checks from the reposit
 
 ```bash
 export RAKSHA_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
-OUTPUT="$(mktemp -d /tmp/raksha-practice.XXXXXX)"
+OUTPUT="$(mktemp -d /tmp/aarogyakey-practice.XXXXXX)"
 
 python3 main.py \
   --input .local-evaluation/official-kit/dev/input \
