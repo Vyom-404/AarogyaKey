@@ -29,7 +29,7 @@ The synthetic auxiliary-registry attack showed a fall in unique matches after sa
 ## Historical phase evidence
 
 - Phase 2.1 and subsequent practice checks reported 0/3,230 known PII surfaces and 0/4 known canaries visible, with 4,855/4,855 medical probes preserved.
-- Phase 3 and later linkage evaluations reported precision 1.00, recall 0.26, F0.5 0.63, and zero observed false merges on the practice data.
+- Earlier Phase 3-7 linkage evaluations reported precision 1.00, recall 0.26, F0.5 0.63. After allowing exact same-namespace MRNs to link absent conflicting evidence, the latest practice run reports precision 1.00, recall 0.36, F0.5 0.74, with zero observed false merges. This is a practice-data gain, not proof of hidden-data accuracy.
 - Phase 4/4.1 re-identification work corrected a measurement issue. Later phase reports document changes in date-based equivalence groups and the Phase 6.1 singleton limitation above.
 - Phase 5/5.1 found the AES-GCM persistence helper is available but unused by the live in-memory pipeline. Fourteen date-shift actions in a prior comparison had no pairable output date because text sanitization subsequently removed those spans; they were not evidence of inconsistent shifts, but remain an accounting/verification limitation.
 
