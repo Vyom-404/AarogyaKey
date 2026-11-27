@@ -54,7 +54,7 @@ The resolver previously allowed exact name + same village + age within one year 
 - DOB/date collision regression: passed; the latest practice checker reports no DOB surface leakage.
 - Homonym linkage regressions: passed; practice precision/recall/F0.5 remains 1.00 / 0.36 / 0.74 with zero observed wrong merges.
 
-The latest checker run found `submission_docs/PROJECT_BRIEF.pdf`, which is a draft. The checker only checks for a recursively located PDF; it does not verify whether that document is the final brief, its page count, content, or team details. The final Project Brief will be created separately in Google Docs by the user. The software checker result therefore does not verify the final brief artifact.
+The two-page Project Brief for Team Pikachu (Vyom Gupta and Shreyansh Sharma) was rendered and visually reviewed, and is submitted separately from GitHub. Its local copy is intentionally excluded from the repository. The organizer checker only verifies that a PDF is present; it does not inspect content, page count, or team details. The file-presence check returned `READY TO SUBMIT` while the PDF was present locally, but a GitHub clone will not contain that separately submitted PDF.
 
 ## Limitations and failures
 
@@ -65,4 +65,4 @@ The latest checker run found `submission_docs/PROJECT_BRIEF.pdf`, which is a dra
 - At-rest encryption is not used for current in-memory intermediates; Python memory/swap and secure erasure are outside the guarantees.
 - Local CPU/RSS measurements do not establish the organizer's whole-process-tree maximum resource behavior on hidden input.
 - The exact-stay default protects clinical fidelity but leaves stay duration available as a quasi-identifier; the tested singleton rates did not improve or worsen on the four small generated cohorts.
-- The final Google Docs Project Brief has not been provided for review; its content and team details remain unverified.
+- The organizer checker does not validate the Project Brief's contents or page count; those were checked separately for the locally retained, separately submitted PDF.

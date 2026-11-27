@@ -250,7 +250,7 @@ python3 .local-evaluation/official-kit/check_submission.py --repo . --run
 
 The contract validator checks output structure and accounting. The practice checker measures known practice PII surfaces, canaries, medical probes, linkage, and raw-copy behavior. The three-run checker checks the configured run command, output contract, repeatability with the same secret, changed-secret behavior, and input immutability. These checks have different purposes; a `CONTRACT OK` result alone does not measure privacy.
 
-The organizer kit is git-ignored and is not included in a clone. Do not commit it: it contains practice data and answer-key material. The submission checker only detects whether a PDF exists; it does not establish that it is the final Project Brief or inspect the PDF's content. The final Project Brief is prepared separately and must be checked against the organizer's written requirements.
+The organizer kit is git-ignored and is not included in a clone. Do not commit it: it contains practice data and answer-key material. The two-page Project Brief is prepared and submitted separately from GitHub. It is kept in the local `submission_docs/` folder and intentionally excluded from the repository. The submission checker only detects whether a PDF exists; it does not inspect the brief's content or page count.
 
 ## Latest verified practice results
 
@@ -265,7 +265,7 @@ The latest local practice run recorded:
 - Official three-run checker: **`READY TO SUBMIT`** for its software checks.
 - Unit tests: **108 passed**; compilation passed.
 
-These are local practice/synthetic results, not organizer hidden-test results. The same evaluation identified high singleton rates in small re-identification cohorts (22/36 on one fixed cohort and 36/36 on a varied cohort), incomplete linkage recall, and partial rather than comprehensive FHIR validation. Review [`submission_docs/EVALUATION.md`](submission_docs/EVALUATION.md) for the consolidated evidence and limitations. The final external Project Brief is not validated by this README or by the checker’s PDF-presence result.
+These are local practice/synthetic results, not organizer hidden-test results. The same evaluation identified high singleton rates in small re-identification cohorts (22/36 on one fixed cohort and 36/36 on a varied cohort), incomplete linkage recall, and partial rather than comprehensive FHIR validation. Review [`submission_docs/EVALUATION.md`](submission_docs/EVALUATION.md) for the consolidated evidence and limitations. The brief's two-page layout and supplied team details were checked separately; the organizer checker verifies PDF presence only.
 
 ## Known limitations
 
@@ -277,7 +277,7 @@ These are local practice/synthetic results, not organizer hidden-test results. T
 - Exact stay duration is preserved by default and may remain a quasi-identifier when combined with age, location, hospital, dates, or diagnosis.
 - The AES-GCM persistence helper is available but unused by the current in-memory processing pipeline. Python memory, swap, and secure deletion guarantees are outside scope.
 - The report's local runtime and RSS measurements do not establish resource behavior on organizer hidden data or across the entire process tree.
-- The checker’s Project Brief PDF-presence result does not validate the final separate Google Docs brief.
+- The organizer checker checks that a PDF exists but does not validate its content, page count, or acceptance by reviewers.
 
 ## Repository map
 
