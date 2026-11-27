@@ -11,6 +11,8 @@ from src.detection.normalization import normalize_text
 from src.linkage.models import IdentitySignal, LinkDecision, LinkResult, RecordIdentity
 from src.linkage.pseudonymizer import Pseudonymizer
 
+# AADHAAR here means a complete validated 12-digit value; masked suffixes are
+# deliberately kept out of this global, unique-identifier set.
 _GLOBAL_STRONG = {"AADHAAR", "ABHA_NUMBER", "PAN", "EMAIL"}
 _LOCAL_STRONG = {"MRN", "INSURANCE_ID"}
 _ALL_STRONG = _GLOBAL_STRONG | _LOCAL_STRONG
@@ -207,9 +209,6 @@ class PatientResolver:
         elif same_name and same_relative:
             evidence.extend(("normalized_name", "exact_relative_name"))
             confidence = 0.955
-        elif same_name and same_village and age_close:
-            evidence.extend(("normalized_name", "same_village", "age_within_one_year"))
-            confidence = 0.94
         elif same_name and shared_phone:
             evidence.extend(("normalized_name", "shared_phone"))
             confidence = 0.925
@@ -329,10 +328,6 @@ class PatientResolver:
             return ("resolved-identity", sorted(common_names)[0], "relative=" + sorted(common_relatives)[0])
         common_villages = set.intersection(*(_bucket(record, "VILLAGE") for record in cluster)) if cluster else set()
         common_ages = set.intersection(*(_bucket(record, "AGE") for record in cluster)) if cluster else set()
-        if common_names and common_villages and common_ages:
-            return ("resolved-identity", sorted(common_names)[0], "village=" + sorted(common_villages)[0],
-                    "age=" + sorted(common_ages)[0])
-
         all_strong = sorted({(s.category, s.namespace, s.value) for record in cluster
                              for s in record.signals if s.category in _ALL_STRONG})
         if all_strong:
@@ -352,7 +347,11 @@ class PatientResolver:
         # Without a usable name, no stable patient-scoped identity is available.
         if not names:
             return None
-        if len(cluster) == 1 and not (dobs or relatives or phones or villages):
+        # Demographics such as name, age, and village are not unique enough to
+        # create a patient token for an unresolved singleton. In particular,
+        # two same-name residents with the same age/location must not converge
+        # on the same pseudonym merely because their weak profile matches.
+        if len(cluster) == 1 and not (dobs or relatives or phones):
             return None
         return ("resolved-identity", names[0], *("dob=" + value for value in dobs[:1]),
                 *("relative=" + value for value in relatives[:1]),

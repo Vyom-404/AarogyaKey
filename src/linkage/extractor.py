@@ -180,6 +180,19 @@ def _add_value(candidate: RecordIdentity, category: str, value: Any, field: str,
         for normalized in _dob_values(text):
             candidate.add("DOB", normalized)
         return
+    if category == "AADHAAR":
+        compact = re.sub(r"[\s-]", "", normalize_text(text))
+        if re.fullmatch(r"\d{12}", compact) and re.fullmatch(r"[\d\s-]+", text):
+            candidate.add("AADHAAR", compact, "global")
+            if carrier:
+                _carrier(candidate, category, path)
+            return
+        # Masked Aadhaar exposes only a suffix. Keep it out of the global
+        # unique-ID class so it cannot merge patients by itself.
+        masked = re.fullmatch(r"(?i)(?:[x*•●#][\s-]?){4,}(\d{4})", text)
+        if masked:
+            candidate.add("AADHAAR_MASKED", masked.group(1), "masked-suffix")
+        return
     if category in {"VILLAGE", "LOCALITY", "DISTRICT", "PIN", "ADDRESS"}:
         normalized = normalize_text(text)
         if len(normalized) > 140:

@@ -87,6 +87,53 @@ class ResolverTests(unittest.TestCase):
         result = self.resolver.resolve([a, b], self.pseudo)
         self.assertNotEqual(result.pseudonyms.get((a.file, a.loc)), result.pseudonyms.get((b.file, b.loc)))
 
+    def test_name_village_and_one_year_age_change_without_stable_evidence_stays_unresolved(self) -> None:
+        a = record("hospital-a/visits.csv", "Rahul Sharma")
+        b = record("hospital-b/visits.csv", "Rahul Sharma")
+        a.add("AGE", "40")
+        b.add("AGE", "41")
+        a.add("VILLAGE", "Rampur")
+        b.add("VILLAGE", "Rampur")
+        a.add("EVENT_DATE", "2025-11-26")
+        b.add("EVENT_DATE", "2026-11-26")
+
+        result = self.resolver.resolve([a, b], self.pseudo)
+
+        self.assertFalse(result.pseudonyms)
+
+    def test_same_name_same_village_same_age_homonyms_are_not_merged(self) -> None:
+        a = record("hospital-a/visits.csv", "Rahul Sharma")
+        b = record("hospital-b/visits.csv", "Rahul Sharma")
+        for item in (a, b):
+            item.add("AGE", "42")
+            item.add("VILLAGE", "Rampur")
+
+        result = self.resolver.resolve([a, b], self.pseudo)
+
+        self.assertFalse(result.pseudonyms)
+
+    def test_shared_patient_identifier_keeps_pseudonym_when_age_increases(self) -> None:
+        a = record("hospital-a/visits.csv", "Rahul Sharma")
+        b = record("hospital-b/visits.csv", "Rahul Sharma")
+        a.add("AGE", "42")
+        b.add("AGE", "43")
+        a.add("AADHAAR", "234567890123", "global")
+        b.add("AADHAAR", "234567890123", "global")
+
+        result = self.resolver.resolve([a, b], self.pseudo)
+
+        self.assertEqual(result.pseudonyms[(a.file, a.loc)], result.pseudonyms[(b.file, b.loc)])
+
+    def test_name_and_one_year_age_change_without_independent_evidence_stays_unresolved(self) -> None:
+        a = record("hospital-a/visits.csv", "Rahul Sharma")
+        b = record("hospital-b/visits.csv", "Rahul Sharma")
+        a.add("AGE", "40")
+        b.add("AGE", "41")
+
+        result = self.resolver.resolve([a, b], self.pseudo)
+
+        self.assertFalse(result.pseudonyms)
+
     def test_relationship_plus_conflicting_phone_blocks_homonym_merge(self) -> None:
         a = record("hospital-a.txt", "Nisha Khan", relative="Imran Khan")
         b = record("hospital-b.txt", "Nisha Khan", relative="Imran Khan")
@@ -136,6 +183,65 @@ class ResolverTests(unittest.TestCase):
 
 
 class ExtractionAndPipelineTests(unittest.TestCase):
+    def test_full_aadhaar_separates_same_name_age_and_village_homonyms(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            identities = []
+            for site, aadhaar in (("hospital-a", "234567890123"), ("hospital-b", "345678901234")):
+                folder = root / site
+                folder.mkdir()
+                source = folder / "visits.csv"
+                source.write_text(
+                    "patient_name,age,village,aadhaar\n"
+                    f"Synthetic Patient,42,Sample Village,{aadhaar}\n",
+                    encoding="utf-8",
+                )
+                identities.extend(extract_file_records(source, f"{site}/visits.csv", PIIDetector()))
+
+        result = PatientResolver().resolve(identities, Pseudonymizer("synthetic global ID test secret"))
+        tokens = [result.pseudonyms[(item.file, item.loc)] for item in identities]
+        self.assertEqual(len(tokens), 2)
+        self.assertNotEqual(tokens[0], tokens[1])
+
+    def test_shared_abha_links_revisits_and_conflicting_abha_keeps_homonym_separate(self) -> None:
+        records = []
+        for file, age, abha in (
+            ("hospital-a/first.csv", "42", "12345678901234"),
+            ("hospital-b/revisit.csv", "43", "12345678901234"),
+            ("hospital-c/homonym.csv", "42", "98765432109876"),
+        ):
+            item = record(file, "Synthetic Patient")
+            item.add("AGE", age)
+            item.add("VILLAGE", "Sample Village")
+            item.add("ABHA_NUMBER", abha, "global")
+            records.append(item)
+
+        result = PatientResolver().resolve(records, Pseudonymizer("synthetic ABHA test secret"))
+        tokens = [result.pseudonyms[(item.file, item.loc)] for item in records]
+        self.assertEqual(tokens[0], tokens[1])
+        self.assertNotEqual(tokens[0], tokens[2])
+
+    def test_masked_aadhaar_suffix_is_not_a_unique_linkage_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            identities = []
+            for site in ("hospital-a", "hospital-b"):
+                folder = root / site
+                folder.mkdir()
+                source = folder / "visits.csv"
+                source.write_text(
+                    "patient_name,age,village,aadhaar\n"
+                    "Synthetic Patient,42,Sample Village,XXXXXXXX1234\n",
+                    encoding="utf-8",
+                )
+                identities.extend(extract_file_records(source, f"{site}/visits.csv", PIIDetector()))
+
+        categories = [{signal.category for signal in item.signals} for item in identities]
+        self.assertTrue(all("AADHAAR_MASKED" in found for found in categories))
+        self.assertTrue(all("AADHAAR" not in found for found in categories))
+        result = PatientResolver().resolve(identities, Pseudonymizer("synthetic masked ID test secret"))
+        self.assertFalse(result.pseudonyms)
+
     def test_devanagari_tsv_headers_are_linkage_fields_and_values_are_sanitized(self) -> None:
         with tempfile.TemporaryDirectory() as input_dir, tempfile.TemporaryDirectory() as output_parent:
             root = Path(input_dir)
