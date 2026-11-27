@@ -11,7 +11,7 @@ Fresh run against the official practice input (200 files, 822 records):
 | PII surfaces visible | 0 / 3,230 (0%) |
 | Canaries visible | 0 / 4 |
 | Medical probes preserved | 4,855 / 4,855 (100%) |
-| Linkage precision / recall / F0.5 | 1.00 / 0.26 / 0.63 |
+| Linkage precision / recall / F0.5 | 1.00 / 0.36 / 0.74 |
 | Wrong patient merges | 0 observed |
 | Files sanitized / quarantined | 193 / 7 |
 | Elapsed time / process peak RSS | 5.31 s / 42.6 MB (local run) |
