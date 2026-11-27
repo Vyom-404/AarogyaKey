@@ -10,7 +10,7 @@ The tested practice profile is English, Hindi/Devanagari, and Hinglish. Detectio
 
 `src/linkage/` extracts identity evidence and compares records using conservative blocks, agreement, and conflict checks. Strong identifiers can support cross-hospital and cross-script linkage. Weak or conflicting evidence is rejected or left unresolved to limit false merges. Patient pseudonyms are derived using HMAC with a dedicated HKDF-separated key purpose and the runtime `RAKSHA_SECRET`; raw identifiers are not used as pseudonyms.
 
-Practice linkage remains high precision and incomplete: precision 1.00, recall 0.26, F0.5 0.63, and zero observed wrong merges. Conservative thresholds intentionally leave some true links unresolved.
+Practice linkage remains high precision and incomplete: precision 1.00, recall 0.36, F0.5 0.74, and zero observed wrong merges in the latest run. A narrowly scoped rule accepts an exact MRN within the same inferred hospital namespace when no contradictory DOB, global identifier, or incompatible name is present. Most name-only or otherwise weak pairs remain unresolved.
 
 ## Quasi-identifiers
 
