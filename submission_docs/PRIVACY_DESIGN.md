@@ -14,7 +14,7 @@ Practice linkage remains high precision and incomplete: precision 1.00, recall 0
 
 ## Quasi-identifiers
 
-The privacy layer generalizes age into truthful bands (including dedicated child and older-age bands), reduces location/PIN precision, buckets selected length-of-stay fields, and shifts identifiable dates by a deterministic patient-specific offset. Each patient's relative date intervals remain consistent across their linked records. Unresolved identities receive conservative date precision. Rare diagnosis generalization is configurable and defaults to preserving clinical values.
+The privacy layer generalizes age into truthful bands (including dedicated child and older-age bands), reduces location/PIN precision, and shifts identifiable dates by a deterministic patient-specific offset. Exact length-of-stay values are preserved by default to meet the clinical-integrity requirement; bucketing is available only as an explicit policy opt-in. Each patient's relative date intervals remain consistent across linked records. Unresolved identities receive conservative date precision. Rare diagnosis generalization is configurable and defaults to preserving clinical values.
 
 The pipeline reports exact-equivalence-class sizes for declared combinations. These are diagnostic risk indicators, not proof of k-anonymity against arbitrary auxiliary data and not a guarantee of anonymity.
 
