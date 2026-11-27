@@ -70,6 +70,11 @@ def build_privacy_actions(records: list[PrivacyRecord], pseudonyms: dict[tuple[s
         normalize_text(field.value) for item in records for field in item.fields
         if field.kind == "diagnosis"
     )
+    protected_dob_dates = {
+        parsed.value.date()
+        for item in records for field in item.fields if field.kind == "dob"
+        if (parsed := parse_date(field.value)) is not None
+    }
     action_values: dict[tuple[str, str], dict[tuple[str | int, ...], str]] = defaultdict(dict)
     action_by_field: dict[tuple[str, str, tuple[str | int, ...], str], PrivacyAction] = {}
 
@@ -94,7 +99,16 @@ def build_privacy_actions(records: list[PrivacyRecord], pseudonyms: dict[tuple[s
                     replacement = _replacement_for_date(field.value, patient, shifter, unresolved_precision)
                     if replacement is None or replacement == field.value:
                         continue
-                    action = "shifted_date" if patient else "generalized_date"
+                    shifted = parse_date(replacement)
+                    if patient and shifted and shifted.value.date() in protected_dob_dates:
+                        # A shifted event date can accidentally reproduce a
+                        # different record's original DOB. Coarsen only that
+                        # colliding output date; all other dates retain the
+                        # same patient-specific offset.
+                        replacement = month_precision(replacement)
+                        action = "generalized_date_collision"
+                    else:
+                        action = "shifted_date" if patient else "generalized_date"
                 stage = "before"
             elif field.kind == "age":
                 replacement = generalize_age(field.value, width, senior_from, minor_bounds)

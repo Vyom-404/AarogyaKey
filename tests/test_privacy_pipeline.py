@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import json
 import tempfile
 import time
@@ -14,6 +15,34 @@ from src.pipeline import run_pipeline
 
 
 class RiskAndPipelineTests(unittest.TestCase):
+    def test_shifted_event_date_is_generalized_if_it_collides_with_any_original_dob(self) -> None:
+        secret = "synthetic collision regression secret"
+        patient = "PSN-SYNTHETIC-COLLISION"
+        base = parse_date("2020-06-15").value.date()
+        baseline_offset = DateShifter(secret).offset_days(patient)
+        protected_dob = base + dt.timedelta(days=baseline_offset)
+
+        dob_record = PrivacyRecord("hospital-a/demographics.csv", "row:0", "csv")
+        dob_record.add("dob", protected_dob.isoformat(), "dob", (2,))
+        collision_record = PrivacyRecord("hospital-b/visits.csv", "row:0", "csv")
+        collision_record.add("event_date", base.isoformat(), "visit_date", (3,))
+        next_visit = PrivacyRecord("hospital-b/visits.csv", "row:1", "csv")
+        next_visit.add("event_date", (base + dt.timedelta(days=7)).isoformat(), "visit_date", (3,))
+        pseudonyms = {
+            (collision_record.file, collision_record.loc): patient,
+            (next_visit.file, next_visit.loc): patient,
+        }
+
+        actions = build_privacy_actions([dob_record, collision_record, next_visit], pseudonyms, secret)
+        collision_action = actions[(collision_record.file, collision_record.loc)][0]
+        next_action = actions[(next_visit.file, next_visit.loc)][0]
+
+        self.assertEqual(collision_action.action, "generalized_date_collision")
+        self.assertEqual(collision_action.replacement, (base + dt.timedelta(days=baseline_offset)).strftime("%Y-%m"))
+        self.assertEqual(next_action.action, "shifted_date")
+        shifted_next = parse_date(next_action.replacement).value.date()
+        self.assertEqual((shifted_next - (base + dt.timedelta(days=7))).days, baseline_offset)
+
     def test_exact_stay_duration_is_preserved_by_default(self) -> None:
         record = PrivacyRecord("hospital/a.json", "/records/0", "json")
         record.add("stay", "9 days", "stay_duration", ("records", 0, "stay_duration"))
