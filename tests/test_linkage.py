@@ -116,6 +116,14 @@ class ResolverTests(unittest.TestCase):
         result = self.resolver.resolve([a, b], self.pseudo)
         self.assertEqual(result.pseudonyms[(a.file, a.loc)], result.pseudonyms[(b.file, b.loc)])
 
+    def test_same_mrn_text_in_different_hospital_scopes_does_not_link_alone(self) -> None:
+        a = record("hospital-a/registration.csv", mrn="MRN-615", scope="hospital-a")
+        b = record("hospital-b/lab.csv", mrn="MRN-615", scope="hospital-b")
+        result = self.resolver.resolve([a, b], self.pseudo)
+        left = result.pseudonyms.get((a.file, a.loc))
+        right = result.pseudonyms.get((b.file, b.loc))
+        self.assertFalse(left is not None and left == right)
+
 
 class ExtractionAndPipelineTests(unittest.TestCase):
     def test_devanagari_tsv_headers_are_linkage_fields_and_values_are_sanitized(self) -> None:
