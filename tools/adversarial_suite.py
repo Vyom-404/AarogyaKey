@@ -469,6 +469,15 @@ def run_seed(seed: int, vary_profiles: bool = False) -> dict[str, Any]:
                 return sum(count_key(value, wanted) for value in node)
             return 0
 
+        def collect_stay_values(node: Any) -> list[str]:
+            if isinstance(node, dict):
+                values = [str(value) for key, value in node.items()
+                          if str(key).casefold() == "stay_duration" and isinstance(value, str)]
+                return values + [value for child in node.values() for value in collect_stay_values(child)]
+            if isinstance(node, list):
+                return [value for child in node for value in collect_stay_values(child)]
+            return []
+
         stay_key_count = count_key(sanitized_json, "stay_duration")
         attacker = _attacker_simulation(manifest["qi_profiles"], sanitized_json, seed)
         linkage = linkage_scenarios(seed)
